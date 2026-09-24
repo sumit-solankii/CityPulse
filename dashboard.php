@@ -1,8 +1,19 @@
 <?php
 /**
- * CityPulse - City Pulse Dashboard
- * Placeholder page. The live Area Pulse dashboard
- * (weather, traffic, air quality, incidents) comes in a later step.
+ * CityPulse - Main Dashboard (Step 7)
+ *
+ * Glanceable civic dashboard combining weather, traffic, incidents
+ * and the analysis results via the existing PHP APIs.
+ *
+ * How to open:
+ *   http://localhost/CityPulse/dashboard.php
+ *
+ * Data is loaded and refreshed from:
+ *   - api/weather.php
+ *   - api/traffic.php
+ *   - api/incidents.php
+ *   - api/analyze.php
+ *   - api/normalized-data.php
  */
 ?>
 <!DOCTYPE html>
@@ -10,27 +21,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>City Pulse | CityPulse</title>
+    <title>CityPulse Dashboard | Real-Time Civic Pulse</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/dashboard.css">
 </head>
-<body class="dashboard">
-    <nav class="navbar">
-        <a class="navbar-brand" href="index.php">
-            <span class="brand-dot"></span> CityPulse
-        </a>
-        <ul class="nav-links">
-            <li><a href="index.php">Home</a></li>
-            <li><a href="dashboard.php" class="active">City Pulse</a></li>
-        </ul>
-    </nav>
+<body class="dashboard-page">
+    <header class="dash-header">
+        <div class="brand-group">
+            <span class="brand-dot" aria-hidden="true"></span>
+            <div class="brand-text">
+                <h1 class="brand">CITYPULSE</h1>
+                <p class="subtitle">Real-Time Civic Pulse</p>
+            </div>
+        </div>
+        <div class="header-info">
+            <div class="clock-block">
+                <span id="header-clock">--:--:-- --</span>
+                <span id="header-date" class="muted">---</span>
+            </div>
+            <div class="chip area-chip">Monitored: <strong>Jaipur / Zone A</strong></div>
+            <div class="chip live-chip" title="Dashboard refreshes every 30 seconds">
+                <span class="live-dot" aria-hidden="true"></span> LIVE
+            </div>
+            <div class="chip updated-chip">Last updated: <strong id="last-updated">--:--:--</strong></div>
+        </div>
+    </header>
 
-    <main class="page">
-        <h1>City Pulse</h1>
-        <p class="muted">
-            The neighborhood pulse dashboard is coming soon. Data modules for weather,
-            traffic, air quality, and incidents are under development.
-        </p>
-        <a class="btn-secondary" href="index.php">&larr; Back to Home</a>
+    <main class="dash-main">
+
+        <!-- Area Pulse (loaded from api/analyze.php) -->
+        <section class="card pulse-section" aria-label="Area Pulse">
+            <p class="section-kicker">AREA PULSE</p>
+            <div id="pulse-value" class="pulse-value">--</div>
+            <p id="pulse-hint" class="muted">Loading&hellip;</p>
+        </section>
+
+        <!-- Four civic status cards -->
+        <section class="cards-grid" aria-label="Civic status cards">
+            <article class="card status-card" data-card="weather">
+                <h2>WEATHER</h2>
+                <div class="card-badge" id="weather-badge"></div>
+                <div class="card-value" id="weather-value">--</div>
+                <p class="card-desc" id="weather-desc">Loading&hellip;</p>
+                <p class="card-updated">Updated: <span id="weather-updated">--</span></p>
+            </article>
+
+            <article class="card status-card" data-card="traffic">
+                <h2>TRAFFIC</h2>
+                <div class="card-badge" id="traffic-badge"></div>
+                <div class="card-value" id="traffic-value">--</div>
+                <p class="card-desc" id="traffic-desc">Loading&hellip;</p>
+                <p class="card-updated">Updated: <span id="traffic-updated">--</span></p>
+            </article>
+
+            <article class="card status-card" data-card="incidents">
+                <h2>INCIDENTS</h2>
+                <div class="card-badge" id="incidents-badge"></div>
+                <div class="card-value" id="incidents-value">--</div>
+                <p class="card-desc" id="incidents-desc">Loading&hellip;</p>
+                <p class="card-updated">Updated: <span id="incidents-updated">--</span></p>
+            </article>
+
+            <article class="card status-card" data-card="pulse">
+                <h2>OVERALL PULSE</h2>
+                <div class="card-badge" id="pulse-badge"></div>
+                <div class="card-value" id="pulse-card-value">--</div>
+                <p class="card-desc" id="pulse-card-desc">Loading&hellip;</p>
+                <p class="card-updated">Analysis: <span id="pulse-updated">--</span></p>
+            </article>
+        </section>
+
+        <!-- What's Happening? + Recent Activity -->
+        <section class="grid-two">
+            <article class="card">
+                <h2>What's Happening?</h2>
+                <div id="happening" class="happening"></div>
+            </article>
+
+            <article class="card">
+                <h2>Recent Activity</h2>
+                <div id="recent" class="recent"></div>
+            </article>
+        </section>
+
+        <!-- Simple trend visualization (no chart library) -->
+        <section class="card trend-card">
+            <h2>Activity Trend <span id="trend-badge" class="trend-badge"></span></h2>
+            <div id="trend-chart" class="trend-chart" aria-label="Activity trend chart"></div>
+            <p class="muted">Combined event activity across all sources &mdash; last 8 hours (all real data).</p>
+        </section>
+
+        <!-- Data sources -->
+        <section class="card sources-card">
+            <h2>Data Sources</h2>
+            <div id="sources" class="sources-grid"></div>
+        </section>
+
     </main>
 
     <footer class="footer">
@@ -38,5 +124,6 @@
     </footer>
 
     <script src="assets/js/main.js"></script>
+    <script src="assets/js/dashboard.js"></script>
 </body>
 </html>
