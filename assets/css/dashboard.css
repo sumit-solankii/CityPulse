@@ -240,6 +240,55 @@ body.dashboard-page {
     font-size: 0.75rem;
 }
 
+.insight-card {
+    padding: 1.1rem 1.25rem;
+}
+
+.insight-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.55rem;
+}
+
+.insight-header h2 {
+    margin: 0 0 0.45rem;
+}
+
+.insight-refresh-btn {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.3rem 0.75rem;
+    background: #101013;
+    color: var(--text);
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.insight-refresh-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.insight-refresh-btn:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.insight-text {
+    margin: 0;
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+
+.insight-status {
+    margin: 0.55rem 0 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
 .alerts-card {
     padding: 1.1rem 1.25rem;
 }
@@ -823,6 +872,9 @@ body.dashboard-page {
         font-size: 1.4rem;
     }
     .timeline-header {
+        flex-direction: column;
+    }
+    .insight-header {
         flex-direction: column;
     }
     .civic-trends-header {

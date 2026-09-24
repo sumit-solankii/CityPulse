@@ -79,6 +79,19 @@
             <p class="summary-meta">Last updated: <span id="summary-updated">--</span></p>
         </section>
 
+        <section class="card insight-card" aria-live="polite">
+            <div class="insight-header">
+                <div>
+                    <h2>AI City Pulse Insight</h2>
+                    <span id="insight-source" class="badge st-live">LIVE DATA</span>
+                </div>
+                <button id="refresh-insight" type="button" class="insight-refresh-btn">Refresh Insight</button>
+            </div>
+            <p id="city-pulse-insight" class="insight-text">Loading insight&hellip;</p>
+            <p id="insight-status" class="insight-status">Using processed CityPulse analysis.</p>
+            <p class="summary-meta">Last updated: <span id="insight-updated">--</span></p>
+        </section>
+
         <section class="card alerts-card" aria-live="polite">
             <div class="alerts-header">
                 <h2>City Pulse Alerts</h2>

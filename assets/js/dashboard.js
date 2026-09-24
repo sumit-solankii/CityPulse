@@ -57,7 +57,9 @@
         incidents: null,
         airQuality: null,
         analysis: null,
-        normalized: null
+        normalized: null,
+        insightSignature: null,
+        insightRequest: null
     };
 
     // ---------- helpers ----------
@@ -333,6 +335,7 @@
         renderAirQuality();
         renderPulse();
         renderSummary();
+        renderInsight(false);
         renderAlerts();
         renderTimeline();
         renderHappening();
@@ -457,6 +460,110 @@
         statusEl.textContent = pulse;
         statusEl.className = "badge st-" + pulse.toLowerCase();
         timeEl.textContent = fmtShortTime((state.analysis && state.analysis.analysis_time) || new Date().toISOString().slice(0,19).replace("T"," "));
+    }
+
+    function insightPayload() {
+        var analysis = state.analysis || {};
+        var anomalies = Array.isArray(analysis.anomalies) ? analysis.anomalies : [];
+        var correlations = Array.isArray(analysis.correlations) ? analysis.correlations : [];
+        var locations = uniqueLocations(anomalies.concat(correlations), 5);
+        var traffic = Array.isArray(state.traffic) ? state.traffic : [];
+        var incidents = Array.isArray(state.incidents) ? state.incidents : [];
+        var worstTraffic = traffic.reduce(function (worst, item) {
+            if (!worst || (parseInt(item.delay_minutes, 10) || 0) > (parseInt(worst.delay_minutes, 10) || 0)) return item;
+            return worst;
+        }, null);
+        var weather = state.weather && !state.weather.error ? state.weather : null;
+        var airQuality = state.airQuality && state.airQuality.success ? state.airQuality : null;
+
+        if (weather && weather.location && locations.indexOf(weather.location) === -1) locations.push(weather.location);
+        if (worstTraffic && worstTraffic.location && locations.indexOf(worstTraffic.location) === -1) locations.push(worstTraffic.location);
+
+        return {
+            mode: state.demoMode ? "DEMO" : "LIVE",
+            overall_pulse: analysis.area_pulse || "NORMAL",
+            locations: locations.slice(0, 5),
+            anomalies: anomalies.slice(0, 5).map(function (anomaly) {
+                return {
+                    type: anomaly.type,
+                    severity: anomaly.severity,
+                    location: anomaly.location,
+                    reason: anomaly.reason
+                };
+            }),
+            correlations: correlations.slice(0, 3).map(function (correlation) {
+                return {
+                    type: correlation.type,
+                    location: correlation.location,
+                    events: correlation.events,
+                    time_difference_minutes: correlation.time_difference_minutes,
+                    message: correlation.message
+                };
+            }),
+            weather: weather ? weather.weather_condition + ", " + weather.severity + " severity" : "unavailable",
+            traffic: worstTraffic ? worstTraffic.traffic_level + " traffic, " + worstTraffic.delay_minutes + " minute delay in " + worstTraffic.location : "unavailable",
+            incidents: incidents.length ? incidents.length + " incident report(s)" : "no incident reports",
+            air_quality: airQuality && airQuality.severity ? airQuality.severity + " air quality" : "unavailable"
+        };
+    }
+
+    function insightSignature(payload) {
+        return JSON.stringify(payload);
+    }
+
+    function renderInsight(forceRefresh) {
+        var insightEl = el("city-pulse-insight");
+        var sourceEl = el("insight-source");
+        var statusEl = el("insight-status");
+        var updatedEl = el("insight-updated");
+        var refreshEl = el("refresh-insight");
+        if (!insightEl || !sourceEl || !statusEl || !updatedEl) return;
+
+        var payload = insightPayload();
+        var signature = insightSignature(payload);
+        var fallback = state.analysis && state.analysis.success
+            ? summaryTextForLocations(payload.overall_pulse, state, payload.locations)
+            : "City Pulse summary is temporarily unavailable.";
+        if (state.demoMode) fallback += " DEMO MODE — Simulated data.";
+
+        sourceEl.textContent = state.demoMode ? "DEMO MODE — Simulated data" : "LIVE DATA";
+        sourceEl.className = "badge " + (state.demoMode ? "st-demo" : "st-live");
+        insightEl.textContent = fallback;
+        statusEl.textContent = "Using the rule-based City Pulse Summary.";
+        updatedEl.textContent = fmtTime(new Date());
+
+        if (!state.analysis || !state.analysis.success) {
+            statusEl.textContent = "AI insight temporarily unavailable.";
+            return;
+        }
+        if (!forceRefresh && state.insightSignature === signature) return;
+        if (state.insightRequest) return;
+
+        state.insightSignature = signature;
+        if (refreshEl) refreshEl.disabled = true;
+        state.insightRequest = fetch("api/ai-insight.php", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        }).then(function (response) {
+            if (!response.ok) throw new Error("Insight HTTP " + response.status);
+            return response.json();
+        }).then(function (result) {
+            if (result && result.success && typeof result.insight === "string" && insightSignature(insightPayload()) === signature) {
+                insightEl.textContent = result.insight;
+                statusEl.textContent = "AI-generated from processed CityPulse analysis.";
+            } else {
+                statusEl.textContent = "AI insight temporarily unavailable. Using the rule-based summary.";
+            }
+        }).catch(function () {
+            statusEl.textContent = "AI insight temporarily unavailable. Using the rule-based summary.";
+        }).then(function () {
+            state.insightRequest = null;
+            if (refreshEl) refreshEl.disabled = false;
+            if (state.insightSignature !== insightSignature(insightPayload())) {
+                renderInsight(false);
+            }
+        });
     }
 
     function buildAlerts() {
@@ -1512,6 +1619,14 @@
             renderCivicTrends();
         });
     });
+
+    var refreshInsightButton = el("refresh-insight");
+    if (refreshInsightButton) {
+        refreshInsightButton.addEventListener("click", function () {
+            state.insightSignature = null;
+            renderInsight(true);
+        });
+    }
 
     tickClock();
     setInterval(tickClock, 1000);

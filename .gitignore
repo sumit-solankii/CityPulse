@@ -10,6 +10,10 @@ config/api_config.php
 # api_config.php to keep the tracked file secret-free.
 config/api_config.local.php
 
+# Optional AI insight configuration override
+config/ai_config.local.php
+config/ai_config.php
+
 # Generic local environment files
 .env
 .env.*
