@@ -26,6 +26,19 @@
     var RECENT_ACTIVITY_LIMIT = 10;
     var TREND_HOURS = 8;
 
+    // Leaflet map (Step 8): centered on Jaipur. A tiny visual offset
+    // keeps overlapping markers in the same zone clickable.
+    var MAP_CENTER = [26.9124, 75.7873];
+    var MAP_ZOOM = 12;
+    var MARKER_OFFSET = {
+        weather:  { lat: 0,      lng: 0 },
+        traffic:  { lat: 0,      lng: 0.0008 },
+        incident: { lat: 0,      lng: -0.0008 }
+    };
+    var map = null;
+    var mapGroups = null;
+    var mapFilter = "all";
+
     var state = {
         weather: null,
         traffic: null,
@@ -430,6 +443,139 @@
         });
     }
 
+    // ---------- Leaflet civic map (Step 8) ----------
+
+    function esc(value) {
+        return String(value === null || value === undefined ? "" : value).replace(/[&<>"']/g, function (ch) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+        });
+    }
+
+    function mapNotice(text) {
+        var node = el("map-notice");
+        if (node) node.textContent = text || "";
+    }
+
+    function popupRow(label, value) {
+        return '<div class="cp-popup-row"><span class="lbl">' + esc(label) + '</span><span class="val">' + esc(value) + '</span></div>';
+    }
+
+    function popupHtml(record) {
+        var valueLabel, valueText;
+        if (record.source === "weather") {
+            valueLabel = "Temperature";
+            valueText = record.value + " °C";
+        } else if (record.source === "traffic") {
+            valueLabel = "Delay";
+            valueText = record.value + " min";
+        } else {
+            valueLabel = "Type";
+            valueText = record.value;
+        }
+
+        return '<div class="cp-popup">'
+            + '<div class="cp-popup-type">' + esc(record.source).toUpperCase() + '</div>'
+            + popupRow("Location", record.location)
+            + popupRow(valueLabel, valueText)
+            + popupRow("Severity", record.severity)
+            + popupRow("Time", fmtShortTime(record.timestamp))
+            + '</div>';
+    }
+
+    function makeMapMarker(record) {
+        // Skip records without valid coordinates - never break the map.
+        var lat = parseFloat(record.latitude);
+        var lng = parseFloat(record.longitude);
+        if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return null;
+        }
+
+        var source = record.source === "incident" ? "incident" : record.source;
+        var off = MARKER_OFFSET[source] || { lat: 0, lng: 0 };
+
+        var icon = L.divIcon({
+            className: "cp-marker",
+            html: '<span class="cp-dot dot-' + source + '"></span>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9]
+        });
+
+        var marker = L.marker([lat + off.lat, lng + off.lng], { icon: icon });
+        marker.bindPopup(popupHtml(record));
+        return marker;
+    }
+
+    function initMap() {
+        var container = el("cityMap");
+        if (!container) return;
+
+        if (typeof L === "undefined") {
+            mapNotice("Map data temporarily unavailable.");
+            return;
+        }
+        if (map) return; // already initialized
+
+        map = L.map("cityMap", { zoomControl: true }).setView(MAP_CENTER, MAP_ZOOM);
+
+        // OpenStreetMap tiles - the geographic layer only.
+        // Civic markers come from the CityPulse APIs, not from OpenStreetMap.
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        mapGroups = {
+            weather: L.layerGroup(),
+            traffic: L.layerGroup(),
+            incident: L.layerGroup()
+        };
+
+        // Filter buttons - show/hide marker groups without reloading the page.
+        document.querySelectorAll(".map-filter-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                document.querySelectorAll(".map-filter-btn").forEach(function (b) {
+                    b.classList.toggle("active", b === btn);
+                });
+                mapFilter = btn.getAttribute("data-filter");
+                applyMapFilter();
+            });
+        });
+    }
+
+    function applyMapFilter() {
+        if (!map || !mapGroups) return;
+        Object.keys(mapGroups).forEach(function (key) {
+            if (mapFilter === "all" || mapFilter === key) {
+                if (!map.hasLayer(mapGroups[key])) map.addLayer(mapGroups[key]);
+            } else if (map.hasLayer(mapGroups[key])) {
+                map.removeLayer(mapGroups[key]);
+            }
+        });
+    }
+
+    function updateMapMarkers() {
+        if (!map || !mapGroups) return;
+
+        Object.keys(mapGroups).forEach(function (key) { mapGroups[key].clearLayers(); });
+
+        var n = state.normalized;
+        if (!n || !n.success || !n.data || !n.data.length) {
+            mapNotice("Map data temporarily unavailable.");
+            applyMapFilter();
+            return;
+        }
+
+        mapNotice("");
+        n.data.forEach(function (record) {
+            var marker = makeMapMarker(record);
+            if (!marker) return;
+            var key = record.source === "incident" ? "incident" : record.source;
+            mapGroups[key].addLayer(marker);
+        });
+
+        applyMapFilter();
+    }
+
     // ---------- main load + auto refresh ----------
 
     function loadAll() {
@@ -454,6 +600,7 @@
             renderRecent();
             renderTrend();
             renderSources();
+            updateMapMarkers();
 
             setText("last-updated", fmtTime(new Date()));
         });
@@ -469,6 +616,7 @@
     tickClock();
     setInterval(tickClock, 1000);
 
+    initMap();
     loadAll();
     setInterval(loadAll, REFRESH_INTERVAL_MS);
 })();

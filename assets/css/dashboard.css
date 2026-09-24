@@ -412,3 +412,153 @@ body.dashboard-page {
         font-size: 1.4rem;
     }
 }
+
+/* ---------- Leaflet civic map (Step 8) ---------- */
+
+.map-card h2 {
+    color: var(--text);
+}
+
+.map-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.map-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.map-filter-btn {
+    background: #101013;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.3rem 0.85rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.map-filter-btn:hover {
+    color: var(--text);
+    border-color: #3d3d45;
+}
+
+.map-filter-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0b0b0d;
+    font-weight: 700;
+}
+
+.city-map {
+    height: 450px;
+    width: 100%;
+    margin-top: 0.9rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: #101013;
+    z-index: 0;
+}
+
+.map-notice {
+    color: var(--red);
+    font-size: 0.85rem;
+    margin: 0.6rem 0 0;
+}
+
+.map-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.8rem;
+    font-size: 0.8rem;
+    color: var(--text);
+}
+
+.legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #0b0b0d;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+}
+
+.legend-note {
+    margin-left: auto;
+}
+
+.dot-weather  { background: #facc15; }
+.dot-traffic  { background: #fb923c; }
+.dot-incident { background: #f87171; }
+
+/* Custom marker dots (divIcon wrapper) */
+.cp-marker {
+    background: transparent;
+    border: none;
+}
+
+.cp-dot {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #0b0b0d;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
+}
+
+/* Dark popups matching the CityPulse theme */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+    background: #131316;
+    color: #ffffff;
+    border: 1px solid #26262b;
+}
+
+.leaflet-popup-content {
+    margin: 12px 14px;
+}
+
+.cp-popup-type {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+}
+
+.cp-popup-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.cp-popup-row .lbl { color: #9ca3af; }
+.cp-popup-row .val { color: #ffffff; font-weight: 600; }
+
+.leaflet-container {
+    font-family: "Segoe UI", system-ui, Arial, sans-serif;
+}
+
+@media (max-width: 640px) {
+    .city-map {
+        height: 360px;
+    }
+    .legend-note {
+        margin-left: 0;
+        width: 100%;
+    }
+}

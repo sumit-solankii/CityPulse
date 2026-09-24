@@ -24,6 +24,7 @@
     <title>CityPulse Dashboard | Real-Time Civic Pulse</title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/dashboard.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 </head>
 <body class="dashboard-page">
     <header class="dash-header">
@@ -91,6 +92,27 @@
             </article>
         </section>
 
+        <!-- Interactive civic map (Leaflet + OpenStreetMap) -->
+        <section class="card map-card">
+            <div class="map-head">
+                <h2>LIVE CIVIC MAP</h2>
+                <div class="map-filters" role="group" aria-label="Filter map markers">
+                    <button type="button" class="map-filter-btn active" data-filter="all">All</button>
+                    <button type="button" class="map-filter-btn" data-filter="weather">Weather</button>
+                    <button type="button" class="map-filter-btn" data-filter="traffic">Traffic</button>
+                    <button type="button" class="map-filter-btn" data-filter="incident">Incidents</button>
+                </div>
+            </div>
+            <div id="cityMap" class="city-map"></div>
+            <p id="map-notice" class="map-notice"></p>
+            <div class="map-legend">
+                <span class="legend-item"><span class="legend-dot dot-weather"></span> Weather</span>
+                <span class="legend-item"><span class="legend-dot dot-traffic"></span> Traffic</span>
+                <span class="legend-item"><span class="legend-dot dot-incident"></span> Incident</span>
+                <span class="legend-note muted">Map tiles &copy; OpenStreetMap contributors &middot; civic data from CityPulse APIs</span>
+            </div>
+        </section>
+
         <!-- What's Happening? + Recent Activity -->
         <section class="grid-two">
             <article class="card">
@@ -123,6 +145,7 @@
         <p>CityPulse &copy; <span data-year></span>. Built for smarter neighborhoods.</p>
     </footer>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/dashboard.js"></script>
 </body>
