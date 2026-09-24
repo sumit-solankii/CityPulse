@@ -79,6 +79,16 @@
             <p class="summary-meta">Last updated: <span id="summary-updated">--</span></p>
         </section>
 
+        <section class="card alerts-card" aria-live="polite">
+            <div class="alerts-header">
+                <h2>City Pulse Alerts</h2>
+                <span id="alerts-demo-label" class="badge st-demo hidden">DEMO MODE — Simulated data</span>
+            </div>
+            <div id="city-pulse-alerts" class="alert-list">
+                <p class="empty-note">Loading alerts&hellip;</p>
+            </div>
+        </section>
+
         <!-- Four civic status cards -->
         <section class="cards-grid" aria-label="Civic status cards">
             <article class="card status-card" data-card="weather">

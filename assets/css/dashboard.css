@@ -240,6 +240,71 @@ body.dashboard-page {
     font-size: 0.75rem;
 }
 
+.alerts-card {
+    padding: 1.1rem 1.25rem;
+}
+
+.alerts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.alerts-header h2 {
+    margin: 0;
+}
+
+.alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.alert-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.8rem;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.7rem 0.8rem;
+    background: #101013;
+}
+
+.alert-severity {
+    min-width: 90px;
+    text-align: center;
+}
+
+.alert-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.alert-message {
+    color: var(--text);
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.alert-meta {
+    color: var(--muted);
+    font-size: 0.72rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.alert-time {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
 .pulse-value {
     font-size: clamp(2.4rem, 7vw, 4rem);
     font-weight: 800;

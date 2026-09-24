@@ -331,6 +331,7 @@
         renderAirQuality();
         renderPulse();
         renderSummary();
+        renderAlerts();
         renderHappening();
         renderRecent();
         renderTrend();
@@ -429,7 +430,7 @@
         if (!summaryEl || !statusEl || !timeEl) return;
 
         if (state.demoMode) {
-            var demoText = state.demoScenario === DEMO_SCENARIOS.MODERATE ? "Simulated data for demonstration" : (state.demoScenario === DEMO_SCENARIOS.HIGH_ACTIVITY ? "Simulated data for demonstration" : "Simulated data for demonstration");
+            var demoText = "Simulated data for demonstration";
             var summary = summaryTextForLocations(state.analysis && state.analysis.area_pulse ? state.analysis.area_pulse : "NORMAL", state, ["Jaipur", "Zone A", "Zone C"]);
             summaryEl.textContent = summary + " " + demoText;
             statusEl.textContent = demoLabel(state.demoScenario);
@@ -452,6 +453,154 @@
         statusEl.textContent = pulse;
         statusEl.className = "badge st-" + pulse.toLowerCase();
         timeEl.textContent = fmtShortTime((state.analysis && state.analysis.analysis_time) || new Date().toISOString().slice(0,19).replace("T"," "));
+    }
+
+    function buildAlerts() {
+        var a = state.analysis || {};
+        var pulse = a.area_pulse || "NORMAL";
+        var anomalies = Array.isArray(a.anomalies) ? a.anomalies : [];
+        var correlations = Array.isArray(a.correlations) ? a.correlations : [];
+        var alerts = [];
+        var now = a.analysis_time || new Date().toISOString().slice(0, 19).replace("T", " ");
+
+        if (pulse === "HIGH") {
+            alerts.push({
+                level: "HIGH",
+                message: "High activity is being observed across the monitored area.",
+                location: "Jaipur",
+                time: now
+            });
+        }
+
+        if (pulse === "MODERATE") {
+            alerts.push({
+                level: "MODERATE",
+                message: "Moderate activity is being observed in the monitored area.",
+                location: "Jaipur",
+                time: now
+            });
+        }
+
+        anomalies.forEach(function (an) {
+            var loc = an.location || "Jaipur";
+            var msg = an.type ? (an.type.charAt(0).toUpperCase() + an.type.slice(1)) : "Condition";
+
+            if (an.severity === "HIGH") {
+                alerts.push({
+                    level: "HIGH",
+                    message: "High " + msg.toLowerCase() + " activity detected in " + loc + ".",
+                    location: loc,
+                    time: now
+                });
+            } else if (an.severity === "MODERATE") {
+                alerts.push({
+                    level: "MODERATE",
+                    message: "Moderate " + msg.toLowerCase() + " activity observed in " + loc + ".",
+                    location: loc,
+                    time: now
+                });
+            } else if (an.type === "weather") {
+                alerts.push({
+                    level: "INFORMATION",
+                    message: "Rainfall is currently being observed in " + loc + ".",
+                    location: loc,
+                    time: now
+                });
+            }
+        });
+
+        correlations.forEach(function (corr) {
+            var loc = corr.location || "Jaipur";
+            var eventMessage = "Traffic activity coincides with rainfall in " + loc + ".";
+            if (corr.events && corr.events.indexOf("incident") !== -1) {
+                eventMessage = "Incidents are occurring near areas with increased traffic in " + loc + ".";
+            }
+            if (corr.events && corr.events.indexOf("air_quality") !== -1) {
+                eventMessage = "Air quality changes coincide with increased activity in " + loc + ".";
+            }
+            alerts.push({
+                level: "INFORMATION",
+                message: eventMessage,
+                location: loc,
+                time: now
+            });
+        });
+
+        if (!alerts.length) {
+            alerts.push({
+                level: "INFORMATION",
+                message: "No active alerts. City conditions are stable.",
+                location: "Jaipur",
+                time: now
+            });
+        }
+
+        alerts.sort(function (x, y) {
+            var rank = { HIGH: 3, MODERATE: 2, INFORMATION: 1 };
+            return (rank[y.level] || 0) - (rank[x.level] || 0);
+        });
+
+        return alerts.slice(0, 5);
+    }
+
+    function renderAlerts() {
+        var list = el("city-pulse-alerts");
+        var demoLabel = el("alerts-demo-label");
+        if (!list) return;
+
+        if (demoLabel) {
+            demoLabel.classList.toggle("hidden", !state.demoMode);
+        }
+
+        if (!state.analysis || !state.analysis.success) {
+            list.innerHTML = '<p class="empty-note">Alerts temporarily unavailable.</p>';
+            return;
+        }
+
+        var alerts = buildAlerts();
+        list.innerHTML = "";
+
+        alerts.forEach(function (alert) {
+            var item = document.createElement("div");
+            item.className = "alert-item";
+
+            var badge = document.createElement("div");
+            badge.className = "alert-severity badge st-" + alert.level.toLowerCase();
+            badge.textContent = alert.level;
+
+            var content = document.createElement("div");
+            content.className = "alert-content";
+
+            var message = document.createElement("div");
+            message.className = "alert-message";
+            message.textContent = alert.message;
+
+            var meta = document.createElement("div");
+            meta.className = "alert-meta";
+
+            if (alert.location) {
+                var loc = document.createElement("span");
+                loc.textContent = "Location: " + alert.location;
+                meta.appendChild(loc);
+            }
+            if (alert.time) {
+                var time = document.createElement("span");
+                time.textContent = "Time: " + alert.time;
+                meta.appendChild(time);
+            }
+
+            content.appendChild(message);
+            content.appendChild(meta);
+
+            var timeBox = document.createElement("div");
+            timeBox.className = "alert-time";
+            timeBox.textContent = fmtShortTime(alert.time);
+
+            item.appendChild(badge);
+            item.appendChild(content);
+            item.appendChild(timeBox);
+            list.appendChild(item);
+        });
     }
 
     // ---------- card renderers (each fails on its own) ----------
