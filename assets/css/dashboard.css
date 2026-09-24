@@ -97,6 +97,25 @@ body.dashboard-page {
     font-weight: 600;
 }
 
+.area-selector {
+    color: var(--muted);
+}
+
+.area-selector select {
+    appearance: none;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.area-selector option {
+    background: #131316;
+    color: var(--text);
+}
+
 .live-dot {
     width: 8px;
     height: 8px;

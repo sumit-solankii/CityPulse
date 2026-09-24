@@ -41,7 +41,16 @@
                 <span id="header-clock">--:--:-- --</span>
                 <span id="header-date" class="muted">---</span>
             </div>
-            <div class="chip area-chip">Monitored: <strong>Jaipur / Zone A</strong></div>
+            <label class="chip area-selector" for="area-filter">
+                <span>Monitor Area:</span>
+                <select id="area-filter" aria-label="Monitor area">
+                    <option value="ALL">All Areas</option>
+                    <option value="Zone A">Zone A</option>
+                    <option value="Zone B">Zone B</option>
+                    <option value="Zone C">Zone C</option>
+                </select>
+            </label>
+            <div class="chip area-chip">Selected: <strong id="selected-area-label">All Areas</strong></div>
             <div class="chip live-chip" title="Dashboard refreshes every 30 seconds">
                 <span class="live-dot" aria-hidden="true"></span> LIVE
             </div>

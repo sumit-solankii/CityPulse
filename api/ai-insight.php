@@ -52,6 +52,7 @@ function insight_list($items, $limit = 5)
 
 $summary = [
     'mode'          => insight_text(isset($input['mode']) ? $input['mode'] : 'LIVE', 20),
+    'selected_area' => insight_text(isset($input['selected_area']) ? $input['selected_area'] : 'ALL', 40),
     'overall_pulse' => insight_text(isset($input['overall_pulse']) ? $input['overall_pulse'] : 'NORMAL', 20),
     'locations'     => array_values(array_filter(array_map('insight_text', isset($input['locations']) && is_array($input['locations']) ? array_slice($input['locations'], 0, 5) : []))),
     'anomalies'     => insight_list(isset($input['anomalies']) ? $input['anomalies'] : []),

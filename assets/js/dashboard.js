@@ -52,6 +52,7 @@
     var state = {
         demoMode: false,
         demoScenario: DEMO_SCENARIOS.NORMAL,
+        selectedArea: "ALL",
         weather: null,
         traffic: null,
         incidents: null,
@@ -315,6 +316,60 @@
         };
     }
 
+    function areaMatches(location) {
+        return state.selectedArea === "ALL" || location === state.selectedArea;
+    }
+
+    function buildAreaView() {
+        var area = state.selectedArea;
+        var normalized = state.normalized;
+        var sourceData = normalized && Array.isArray(normalized.data) ? normalized.data : [];
+        var filteredData = area === "ALL" ? sourceData : sourceData.filter(function (record) {
+            return areaMatches(record.location);
+        });
+        var analysis = state.analysis;
+
+        if (area !== "ALL" && analysis) {
+            var anomalies = Array.isArray(analysis.anomalies) ? analysis.anomalies.filter(function (item) {
+                return areaMatches(item.location);
+            }) : [];
+            var correlations = Array.isArray(analysis.correlations) ? analysis.correlations.filter(function (item) {
+                return areaMatches(item.location);
+            }) : [];
+            var highAnomalies = anomalies.filter(function (item) { return item.severity === "HIGH"; }).length;
+            var pulse = correlations.length > 0 || highAnomalies >= 2 ? "HIGH" : (highAnomalies === 1 ? "MODERATE" : "NORMAL");
+            analysis = {
+                success: analysis.success,
+                analysis_time: analysis.analysis_time,
+                area_pulse: pulse,
+                anomalies: anomalies,
+                correlations: correlations,
+                notice: analysis.notice
+            };
+        }
+
+        var weather = state.weather;
+        var airQuality = state.airQuality;
+        if (area !== "ALL") {
+            weather = weather && areaMatches(weather.location) ? weather : null;
+            airQuality = airQuality && areaMatches(airQuality.location) ? airQuality : null;
+        }
+
+        return {
+            weather: weather,
+            traffic: area === "ALL" ? state.traffic : (Array.isArray(state.traffic) ? state.traffic.filter(function (item) { return areaMatches(item.location); }) : state.traffic),
+            incidents: area === "ALL" ? state.incidents : (Array.isArray(state.incidents) ? state.incidents.filter(function (item) { return areaMatches(item.location); }) : state.incidents),
+            airQuality: airQuality,
+            analysis: analysis,
+            normalized: normalized ? { success: normalized.success, count: filteredData.length, data: filteredData } : normalized,
+            hasData: area === "ALL" || filteredData.length > 0
+        };
+    }
+
+    function activeView() {
+        return state.view || buildAreaView();
+    }
+
     function applyDemoData() {
         if (!state.demoMode) return;
         var demo = buildDemoScenario(state.demoScenario);
@@ -329,6 +384,8 @@
     }
 
     function renderAll() {
+        state.view = buildAreaView();
+        setText("selected-area-label", state.selectedArea === "ALL" ? "All Areas" : state.selectedArea);
         renderWeather();
         renderTraffic();
         renderIncidents();
@@ -378,11 +435,13 @@
                     trafficText = "Traffic has increased in " + uniqueLocations(trafficAnomalies, 2).join(", ") + ".";
                 }
             }
-            var airText = "Air quality is showing moderate levels.";
+            var airText = "Air quality data is unavailable for the selected area.";
             if (data && data.airQuality && data.airQuality.severity && data.airQuality.severity !== "NORMAL") {
                 airText = "Air quality is showing " + data.airQuality.severity.toLowerCase() + " levels.";
+            } else if (data && data.airQuality && data.airQuality.severity === "NORMAL") {
+                airText = "Air quality is currently normal.";
             }
-            var extraText = "Recent incidents are also concentrated in the same area.";
+            var extraText = "No recent incident reports are available for the selected area.";
             if (data && data.incidents && data.incidents.length) {
                 var incidentLocs = uniqueLocations(data.incidents, 2);
                 if (incidentLocs.length) {
@@ -393,15 +452,21 @@
             return sentences.join(" ");
         }
 
-        var weatherText = "Heavy weather conditions are affecting the monitored area.";
-        var trafficText = "Traffic is significantly elevated.";
-        var incidentText = "Multiple incidents are being reported.";
+        var weatherText = data && data.weather
+            ? "Weather conditions are being observed in the monitored area."
+            : "Weather data is unavailable for the selected area.";
+        var trafficText = data && data.traffic && data.traffic.length
+            ? "Traffic is significantly elevated."
+            : "Traffic data is unavailable for the selected area.";
+        var incidentText = data && data.incidents && data.incidents.length
+            ? "Incidents are being reported."
+            : "Incident data is unavailable for the selected area.";
         var locList = locs.length > 1 ? locs.slice(0, 2).join(" and ") : locs[0];
 
         if (data && data.analysis && data.analysis.anomalies) {
             var weatherAnoms = data.analysis.anomalies.filter(function (an) { return an.type === "weather"; });
             if (weatherAnoms.length) {
-                weatherText = "Heavy weather conditions are affecting " + uniqueLocations(weatherAnoms, 2).join(", ") + ".";
+                weatherText = "Weather anomalies are being observed in " + uniqueLocations(weatherAnoms, 2).join(", ") + ".";
             }
             var trafficAnoms = data.analysis.anomalies.filter(function (an) { return an.type === "traffic"; });
             if (trafficAnoms.length) {
@@ -409,7 +474,7 @@
             }
             var incidentAnoms = data.analysis.anomalies.filter(function (an) { return an.type === "incident"; });
             if (incidentAnoms.length) {
-                incidentText = "Multiple incidents are being reported in " + uniqueLocations(incidentAnoms, 2).join(", ") + ".";
+                incidentText = "Incidents are being reported in " + uniqueLocations(incidentAnoms, 2).join(", ") + ".";
             }
         }
 
@@ -430,15 +495,24 @@
     }
 
     function renderSummary() {
+        var view = activeView();
         var summaryEl = el("city-pulse-summary");
         var statusEl = el("summary-status");
         var timeEl = el("summary-updated");
 
         if (!summaryEl || !statusEl || !timeEl) return;
 
+        if (state.selectedArea !== "ALL" && !view.hasData) {
+            summaryEl.textContent = "No recent civic data available for this area.";
+            statusEl.textContent = "N/A";
+            statusEl.className = "badge st-unavailable";
+            timeEl.textContent = "--";
+            return;
+        }
+
         if (state.demoMode) {
             var demoText = "Simulated data for demonstration";
-            var summary = summaryTextForLocations(state.analysis && state.analysis.area_pulse ? state.analysis.area_pulse : "NORMAL", state, ["Jaipur", "Zone A", "Zone C"]);
+            var summary = summaryTextForLocations(view.analysis && view.analysis.area_pulse ? view.analysis.area_pulse : "NORMAL", view, state.selectedArea === "ALL" ? ["Jaipur", "Zone A", "Zone C"] : [state.selectedArea]);
             summaryEl.textContent = summary + " " + demoText;
             statusEl.textContent = demoLabel(state.demoScenario);
             statusEl.className = "badge st-demo";
@@ -446,7 +520,7 @@
             return;
         }
 
-        if (!state.analysis || !state.analysis.success) {
+        if (!view.analysis || !view.analysis.success) {
             summaryEl.textContent = "City Pulse summary is temporarily unavailable.";
             statusEl.textContent = "N/A";
             statusEl.className = "badge st-unavailable";
@@ -454,33 +528,35 @@
             return;
         }
 
-        var pulse = state.analysis.area_pulse || "NORMAL";
-        var summary = summaryTextForLocations(pulse, state, uniqueLocations(state.normalized && state.normalized.data ? state.normalized.data : [], 3));
+        var pulse = view.analysis.area_pulse || "NORMAL";
+        var summary = summaryTextForLocations(pulse, view, uniqueLocations(view.normalized && view.normalized.data ? view.normalized.data : [], 3));
         summaryEl.textContent = summary;
         statusEl.textContent = pulse;
         statusEl.className = "badge st-" + pulse.toLowerCase();
-        timeEl.textContent = fmtShortTime((state.analysis && state.analysis.analysis_time) || new Date().toISOString().slice(0,19).replace("T"," "));
+        timeEl.textContent = fmtShortTime((view.analysis && view.analysis.analysis_time) || new Date().toISOString().slice(0,19).replace("T"," "));
     }
 
     function insightPayload() {
-        var analysis = state.analysis || {};
+        var view = activeView();
+        var analysis = view.analysis || {};
         var anomalies = Array.isArray(analysis.anomalies) ? analysis.anomalies : [];
         var correlations = Array.isArray(analysis.correlations) ? analysis.correlations : [];
         var locations = uniqueLocations(anomalies.concat(correlations), 5);
-        var traffic = Array.isArray(state.traffic) ? state.traffic : [];
-        var incidents = Array.isArray(state.incidents) ? state.incidents : [];
+        var traffic = Array.isArray(view.traffic) ? view.traffic : [];
+        var incidents = Array.isArray(view.incidents) ? view.incidents : [];
         var worstTraffic = traffic.reduce(function (worst, item) {
             if (!worst || (parseInt(item.delay_minutes, 10) || 0) > (parseInt(worst.delay_minutes, 10) || 0)) return item;
             return worst;
         }, null);
-        var weather = state.weather && !state.weather.error ? state.weather : null;
-        var airQuality = state.airQuality && state.airQuality.success ? state.airQuality : null;
+        var weather = view.weather && !view.weather.error ? view.weather : null;
+        var airQuality = view.airQuality && view.airQuality.success ? view.airQuality : null;
 
         if (weather && weather.location && locations.indexOf(weather.location) === -1) locations.push(weather.location);
         if (worstTraffic && worstTraffic.location && locations.indexOf(worstTraffic.location) === -1) locations.push(worstTraffic.location);
 
         return {
             mode: state.demoMode ? "DEMO" : "LIVE",
+            selected_area: state.selectedArea,
             overall_pulse: analysis.area_pulse || "NORMAL",
             locations: locations.slice(0, 5),
             anomalies: anomalies.slice(0, 5).map(function (anomaly) {
@@ -512,6 +588,7 @@
     }
 
     function renderInsight(forceRefresh) {
+        var view = activeView();
         var insightEl = el("city-pulse-insight");
         var sourceEl = el("insight-source");
         var statusEl = el("insight-status");
@@ -521,9 +598,12 @@
 
         var payload = insightPayload();
         var signature = insightSignature(payload);
-        var fallback = state.analysis && state.analysis.success
-            ? summaryTextForLocations(payload.overall_pulse, state, payload.locations)
+        var fallback = view.analysis && view.analysis.success
+            ? summaryTextForLocations(payload.overall_pulse, view, payload.locations)
             : "City Pulse summary is temporarily unavailable.";
+        if (state.selectedArea !== "ALL" && !view.hasData) {
+            fallback = "No recent civic data available for this area.";
+        }
         if (state.demoMode) fallback += " DEMO MODE — Simulated data.";
 
         sourceEl.textContent = state.demoMode ? "DEMO MODE — Simulated data" : "LIVE DATA";
@@ -532,8 +612,12 @@
         statusEl.textContent = "Using the rule-based City Pulse Summary.";
         updatedEl.textContent = fmtTime(new Date());
 
-        if (!state.analysis || !state.analysis.success) {
+        if (!view.analysis || !view.analysis.success) {
             statusEl.textContent = "AI insight temporarily unavailable.";
+            return;
+        }
+        if (state.selectedArea !== "ALL" && !view.hasData) {
+            statusEl.textContent = "No recent civic data available for this area.";
             return;
         }
         if (!forceRefresh && state.insightSignature === signature) return;
@@ -567,7 +651,8 @@
     }
 
     function buildAlerts() {
-        var a = state.analysis || {};
+        var view = activeView();
+        var a = view.analysis || {};
         var pulse = a.area_pulse || "NORMAL";
         var anomalies = Array.isArray(a.anomalies) ? a.anomalies : [];
         var correlations = Array.isArray(a.correlations) ? a.correlations : [];
@@ -578,7 +663,7 @@
             alerts.push({
                 level: "HIGH",
                 message: "High activity is being observed across the monitored area.",
-                location: "Jaipur",
+                location: state.selectedArea === "ALL" ? "Jaipur" : state.selectedArea,
                 time: now
             });
         }
@@ -587,7 +672,7 @@
             alerts.push({
                 level: "MODERATE",
                 message: "Moderate activity is being observed in the monitored area.",
-                location: "Jaipur",
+                location: state.selectedArea === "ALL" ? "Jaipur" : state.selectedArea,
                 time: now
             });
         }
@@ -640,8 +725,8 @@
         if (!alerts.length) {
             alerts.push({
                 level: "INFORMATION",
-                message: "No active alerts. City conditions are stable.",
-                location: "Jaipur",
+                message: state.selectedArea === "ALL" ? "No active alerts. City conditions are stable." : "No recent civic data available for this area.",
+                location: state.selectedArea === "ALL" ? "Jaipur" : state.selectedArea,
                 time: now
             });
         }
@@ -655,6 +740,7 @@
     }
 
     function renderAlerts() {
+        var view = activeView();
         var list = el("city-pulse-alerts");
         var demoLabel = el("alerts-demo-label");
         if (!list) return;
@@ -663,7 +749,7 @@
             demoLabel.classList.toggle("hidden", !state.demoMode);
         }
 
-        if (!state.analysis || !state.analysis.success) {
+        if (!view.analysis || !view.analysis.success) {
             list.innerHTML = '<p class="empty-note">Alerts temporarily unavailable.</p>';
             return;
         }
@@ -725,6 +811,7 @@
     }
 
     function renderTimeline() {
+        var view = activeView();
         var list = el("historical-timeline");
         var summary = el("timeline-summary");
         var demoLabel = el("timeline-demo-label");
@@ -732,14 +819,14 @@
 
         if (demoLabel) demoLabel.classList.toggle("hidden", !state.demoMode);
 
-        if (!state.normalized || !state.normalized.success || !Array.isArray(state.normalized.data)) {
+        if (!view.normalized || !view.normalized.success || !Array.isArray(view.normalized.data)) {
             list.innerHTML = '<p class="empty-note">Historical activity is temporarily unavailable.</p>';
             summary.textContent = "Timeline unavailable.";
             return;
         }
 
         var cutoff = Date.now() - timelineHours * 60 * 60 * 1000;
-        var records = state.normalized.data.filter(function (record) {
+        var records = view.normalized.data.filter(function (record) {
             var timestamp = parseTs(record.timestamp).getTime();
             return isFinite(timestamp) && timestamp >= cutoff;
         }).sort(function (a, b) {
@@ -750,7 +837,7 @@
             " recorded in the last " + timelineHours + " hour" + (timelineHours === 1 ? "" : "s") + ".";
 
         if (!records.length) {
-            list.innerHTML = '<p class="empty-note">No recent activity found.</p>';
+            list.innerHTML = '<p class="empty-note">No recent civic data available for this area.</p>';
             return;
         }
 
@@ -803,7 +890,7 @@
     // ---------- card renderers (each fails on its own) ----------
 
     function renderWeather() {
-        var w = state.weather;
+        var w = activeView().weather;
         var badgeEl = el("weather-badge");
         if (!w || w.error) {
             el("weather-badge").innerHTML = "";
@@ -821,7 +908,7 @@
     }
 
     function renderTraffic() {
-        var t = state.traffic;
+        var t = activeView().traffic;
         var badgeEl = el("traffic-badge");
         if (!t || t.error || !t.length) {
             badgeEl.innerHTML = "";
@@ -844,7 +931,7 @@
     }
 
     function renderIncidents() {
-        var inc = state.incidents;
+        var inc = activeView().incidents;
         var badgeEl = el("incidents-badge");
         if (!inc || inc.error || !inc.length) {
             badgeEl.innerHTML = "";
@@ -867,7 +954,7 @@
     }
 
     function renderAirQuality() {
-        var aq = state.airQuality;
+        var aq = activeView().airQuality;
         var badgeEl = el("air-quality-badge");
 
         if (!aq || !aq.success || !aq.measurements) {
@@ -893,11 +980,12 @@
     }
 
     function renderPulse() {
-        var a = state.analysis;
+        var view = activeView();
+        var a = view.analysis;
         var pulseEl = el("pulse-value");
         var badgeEl = el("pulse-badge");
 
-        if (!a || !a.success) {
+        if (!a || !a.success || (state.selectedArea !== "ALL" && !view.hasData)) {
             pulseEl.className = "pulse-value";
             pulseEl.textContent = "--";
             setText("pulse-hint", "Analysis temporarily unavailable");
@@ -928,10 +1016,19 @@
     // ---------- What's Happening? ----------
 
     function renderHappening() {
+        var view = activeView();
         var box = el("happening");
         box.innerHTML = "";
 
-        var a = state.analysis;
+        if (state.selectedArea !== "ALL" && !view.hasData) {
+            var noAreaData = document.createElement("p");
+            noAreaData.className = "empty-note";
+            noAreaData.textContent = "No recent civic data available for this area.";
+            box.appendChild(noAreaData);
+            return;
+        }
+
+        var a = view.analysis;
         if (!a || !a.success) {
             var note = document.createElement("p");
             note.className = "empty-note";
@@ -994,10 +1091,11 @@
     // ---------- Recent Activity ----------
 
     function renderRecent() {
+        var view = activeView();
         var box = el("recent");
         box.innerHTML = "";
 
-        var n = state.normalized;
+        var n = view.normalized;
         if (!n || !n.success || !n.data || !n.data.length) {
             var note = document.createElement("p");
             note.className = "empty-note";
@@ -1037,12 +1135,13 @@
     // ---------- Simple trend (HTML/CSS/JS, no library) ----------
 
     function renderTrend() {
+        var view = activeView();
         var box = el("trend-chart");
         var badgeEl = el("trend-badge");
         box.innerHTML = "";
         badgeEl.textContent = "";
 
-        var n = state.normalized;
+        var n = view.normalized;
         if (!n || !n.success || !n.data || !n.data.length) {
             var note = document.createElement("p");
             note.className = "empty-note";
@@ -1217,6 +1316,7 @@
     }
 
     function renderCivicTrends() {
+        var view = activeView();
         var grid = el("civic-trends-grid");
         var summary = el("civic-trends-summary");
         var demoLabel = el("civic-trends-demo-label");
@@ -1224,14 +1324,14 @@
 
         if (demoLabel) demoLabel.classList.toggle("hidden", !state.demoMode);
 
-        if (!state.normalized || !state.normalized.success || !Array.isArray(state.normalized.data)) {
+        if (!view.normalized || !view.normalized.success || !Array.isArray(view.normalized.data)) {
             grid.innerHTML = '<p class="empty-note">Trend data temporarily unavailable.</p>';
             summary.textContent = "Trend data temporarily unavailable.";
             return;
         }
 
         var cutoff = Date.now() - civicTrendHours * 60 * 60 * 1000;
-        var records = state.normalized.data.filter(function (record) {
+        var records = view.normalized.data.filter(function (record) {
             var timestamp = parseTs(record.timestamp).getTime();
             return isFinite(timestamp) && timestamp >= cutoff;
         });
@@ -1274,10 +1374,10 @@
                 return (metric.source === "incidents" ? record.source === "incident" : record.source === metric.source);
             });
             var latestText = "No latest reading available.";
-            if (metric.source === "weather" && state.weather && state.weather.recorded_at && state.weather.rainfall !== undefined) {
-                latestText = "Latest rainfall: " + state.weather.rainfall + " mm";
-            } else if (metric.source === "air_quality" && state.airQuality && state.airQuality.measurements && state.airQuality.measurements.pm25 !== null) {
-                latestText = "Latest PM2.5: " + state.airQuality.measurements.pm25 + " µg/m³";
+            if (metric.source === "weather" && view.weather && view.weather.recorded_at && view.weather.rainfall !== undefined) {
+                latestText = "Latest rainfall: " + view.weather.rainfall + " mm";
+            } else if (metric.source === "air_quality" && view.airQuality && view.airQuality.measurements && view.airQuality.measurements.pm25 !== null) {
+                latestText = "Latest PM2.5: " + view.airQuality.measurements.pm25 + " µg/m³";
             } else if (sourceRecords.length) {
                 latestText = "Latest observation: " + fmtShortTime(sourceRecords[0].timestamp);
             }
@@ -1291,6 +1391,10 @@
     // ---------- Data source health (reuses the existing feed payloads) ----------
 
     function sourceStatus(payload, kind, maxAgeMinutes) {
+        if (state.selectedArea !== "ALL" && (kind === "weather" || kind === "air_quality") && !payload) {
+            return { status: "DEGRADED", message: state.demoMode ? "No simulated data available for the selected area." : "No data available for the selected area.", latest: null };
+        }
+
         if (state.demoMode) {
             var demoLatest = payload && payload.recorded_at ? payload.recorded_at : null;
             if (Array.isArray(payload)) {
@@ -1362,15 +1466,16 @@
     }
 
     function renderSources() {
+        var view = activeView();
         var box = el("sources");
         if (!box) return;
         box.innerHTML = "";
 
         var sources = [
-            { label: "Weather", provider: "Open-Meteo", payload: state.weather, kind: "weather", maxAge: MAX_WEATHER_AGE_LIVE_MIN },
-            { label: "Traffic", provider: "Simulated/Internal", payload: state.traffic, kind: "traffic", maxAge: MAX_SOURCE_AGE_LIVE_MIN },
-            { label: "Incidents", provider: "Simulated/Internal", payload: state.incidents, kind: "incidents", maxAge: MAX_SOURCE_AGE_LIVE_MIN },
-            { label: "Air Quality", provider: "OpenAQ", payload: state.airQuality, kind: "air_quality", maxAge: MAX_AIR_QUALITY_AGE_LIVE_MIN }
+            { label: "Weather", provider: "Open-Meteo", payload: view.weather, kind: "weather", maxAge: MAX_WEATHER_AGE_LIVE_MIN },
+            { label: "Traffic", provider: "Simulated/Internal", payload: view.traffic, kind: "traffic", maxAge: MAX_SOURCE_AGE_LIVE_MIN },
+            { label: "Incidents", provider: "Simulated/Internal", payload: view.incidents, kind: "incidents", maxAge: MAX_SOURCE_AGE_LIVE_MIN },
+            { label: "Air Quality", provider: "OpenAQ", payload: view.airQuality, kind: "air_quality", maxAge: MAX_AIR_QUALITY_AGE_LIVE_MIN }
         ];
 
         sources.forEach(function (source) {
@@ -1527,7 +1632,7 @@
 
         Object.keys(mapGroups).forEach(function (key) { mapGroups[key].clearLayers(); });
 
-        var n = state.normalized;
+        var n = activeView().normalized;
         if (!n || !n.success || !n.data || !n.data.length) {
             mapNotice("Map data temporarily unavailable.");
             applyMapFilter();
@@ -1536,6 +1641,7 @@
 
         mapNotice("");
         n.data.forEach(function (record) {
+            if (!areaMatches(record.location)) return;
             var marker = makeMapMarker(record);
             if (!marker) return;
             var key = record.source === "incident" ? "incident" : record.source;
@@ -1619,6 +1725,24 @@
             renderCivicTrends();
         });
     });
+
+    var areaFilter = el("area-filter");
+    if (areaFilter) {
+        areaFilter.addEventListener("change", function () {
+            state.selectedArea = areaFilter.value || "ALL";
+            state.insightSignature = null;
+            renderAll();
+            if (map) {
+                var areaCenter = {
+                    "Zone A": [26.9124, 75.7873],
+                    "Zone B": [26.8980, 75.7780],
+                    "Zone C": [26.9210, 75.8050]
+                };
+                if (areaCenter[state.selectedArea]) map.setView(areaCenter[state.selectedArea], MAP_ZOOM);
+                else map.setView(MAP_CENTER, MAP_ZOOM);
+            }
+        });
+    }
 
     var refreshInsightButton = el("refresh-insight");
     if (refreshInsightButton) {
