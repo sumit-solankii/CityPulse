@@ -1,0 +1,19 @@
+# ------------------------------------------------------------
+# CityPulse - files that must NEVER be committed to GitHub
+# ------------------------------------------------------------
+
+# Server-side API configuration (holds OPENAQ_API_KEY).
+# The OpenAQ key belongs here ONLY - never in JavaScript/HTML.
+config/api_config.php
+
+# Optional local override file, if you ever move the key out of
+# api_config.php to keep the tracked file secret-free.
+config/api_config.local.php
+
+# Generic local environment files
+.env
+.env.*
+
+# OS / editor noise
+Thumbs.db
+.DS_Store

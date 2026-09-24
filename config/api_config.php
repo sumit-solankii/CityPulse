@@ -25,7 +25,7 @@
 $openaqKey = getenv('OPENAQ_API_KEY');
 if (!is_string($openaqKey) || $openaqKey === '') {
     // Paste your OpenAQ API key here (inside the quotes).
-    $openaqKey = 'YOUR_OPENAQ_API_KEY_HERE';
+    $openaqKey = '442db3636efc2fda646fbd2278e8dd479d71082107334f35be7432599ae0ed9f';
 }
 
 define('OPENAQ_API_KEY', $openaqKey);
