@@ -206,6 +206,7 @@
         <!-- Data sources -->
         <section class="card sources-card">
             <h2>Data Sources</h2>
+            <p class="sources-summary">Health updates with the dashboard refresh.</p>
             <div id="sources" class="sources-grid"></div>
         </section>
 

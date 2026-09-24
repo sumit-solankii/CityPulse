@@ -1003,40 +1003,104 @@
         });
     }
 
-    // ---------- Data sources (LIVE / AVAILABLE / UNAVAILABLE) ----------
+    // ---------- Data source health (reuses the existing feed payloads) ----------
 
-    function sourceStatus(payload, isArray, maxAgeMinutes) {
-        if (state.demoMode) return { status: "DEMO", note: "Simulated data" };
-        if (!payload || payload.error) return { status: "UNAVAILABLE", note: "" };
-        var latest = isArray ? (payload.length ? payload[0].recorded_at : null) : payload.recorded_at;
-        if (!latest) return { status: "UNAVAILABLE", note: "no records" };
-        var ageMin = (Date.now() - parseTs(latest).getTime()) / 60000;
-        if (ageMin <= maxAgeMinutes) {
-            return { status: "LIVE", note: "Last data " + fmtShortTime(latest) };
+    function sourceStatus(payload, kind, maxAgeMinutes) {
+        if (state.demoMode) {
+            var demoLatest = payload && payload.recorded_at ? payload.recorded_at : null;
+            if (Array.isArray(payload)) {
+                payload.forEach(function (record) {
+                    if (record && record.recorded_at && (!demoLatest || record.recorded_at > demoLatest)) {
+                        demoLatest = record.recorded_at;
+                    }
+                });
+            }
+            return {
+                status: "DEMO",
+                message: "Simulated data in Demo Mode",
+                latest: demoLatest
+            };
         }
-        return { status: "AVAILABLE", note: "Last data " + fmtShortTime(latest) };
+
+        if (!payload) {
+            return { status: "OFFLINE", message: "Data source status temporarily unavailable.", latest: null };
+        }
+        if (payload.error || (kind === "air_quality" && payload.success === false)) {
+            return { status: "OFFLINE", message: "Request failed or data is unavailable.", latest: null };
+        }
+
+        var latest = null;
+        var usable = false;
+        var incomplete = false;
+
+        if (kind === "weather") {
+            usable = typeof payload.temperature === "number" && isFinite(payload.temperature) && !!payload.recorded_at;
+            latest = payload.recorded_at || null;
+        } else if (kind === "traffic" || kind === "incidents") {
+            if (Array.isArray(payload)) {
+                payload.forEach(function (record) {
+                    if (record && record.recorded_at && (!latest || record.recorded_at > latest)) {
+                        latest = record.recorded_at;
+                    }
+                    var recordUsable = record && !!record.recorded_at && !!record.location;
+                    if (recordUsable) usable = true;
+                    if (!recordUsable) incomplete = true;
+                });
+            }
+        } else if (kind === "air_quality") {
+            var measurements = payload.measurements || {};
+            var measurementNames = ["pm25", "pm10", "no2", "o3"];
+            var availableMeasurements = 0;
+            measurementNames.forEach(function (name) {
+                if (typeof measurements[name] === "number" && isFinite(measurements[name])) {
+                    availableMeasurements++;
+                }
+            });
+            usable = availableMeasurements > 0 && !!payload.recorded_at;
+            incomplete = availableMeasurements < measurementNames.length;
+            latest = payload.recorded_at || null;
+        }
+
+        if (!usable) {
+            return { status: "OFFLINE", message: "No usable data is available.", latest: latest };
+        }
+
+        var ageMinutes = latest ? (Date.now() - parseTs(latest).getTime()) / 60000 : Infinity;
+        if (!isFinite(ageMinutes) || ageMinutes > maxAgeMinutes || incomplete) {
+            var degradedMessage = ageMinutes > maxAgeMinutes
+                ? "Data is stale; last update " + fmtShortTime(latest) + "."
+                : "Data is partially available.";
+            return { status: "DEGRADED", message: degradedMessage, latest: latest };
+        }
+
+        return { status: "ONLINE", message: "Updated recently.", latest: latest };
     }
 
     function renderSources() {
         var box = el("sources");
+        if (!box) return;
         box.innerHTML = "";
 
         var sources = [
-            { label: "Weather",     payload: state.weather,     isArray: false, maxAge: MAX_WEATHER_AGE_LIVE_MIN },
-            { label: "Traffic",     payload: state.traffic,     isArray: true,  maxAge: MAX_SOURCE_AGE_LIVE_MIN },
-            { label: "Incidents",   payload: state.incidents,   isArray: true,  maxAge: MAX_SOURCE_AGE_LIVE_MIN },
-            { label: "Air Quality", payload: state.airQuality,  isArray: false, maxAge: MAX_AIR_QUALITY_AGE_LIVE_MIN }
+            { label: "Weather", provider: "Open-Meteo", payload: state.weather, kind: "weather", maxAge: MAX_WEATHER_AGE_LIVE_MIN },
+            { label: "Traffic", provider: "Simulated/Internal", payload: state.traffic, kind: "traffic", maxAge: MAX_SOURCE_AGE_LIVE_MIN },
+            { label: "Incidents", provider: "Simulated/Internal", payload: state.incidents, kind: "incidents", maxAge: MAX_SOURCE_AGE_LIVE_MIN },
+            { label: "Air Quality", provider: "OpenAQ", payload: state.airQuality, kind: "air_quality", maxAge: MAX_AIR_QUALITY_AGE_LIVE_MIN }
         ];
 
-        sources.forEach(function (s) {
-            var info = sourceStatus(s.payload, s.isArray, s.maxAge);
+        sources.forEach(function (source) {
+            var info = sourceStatus(source.payload, source.kind, source.maxAge);
 
             var item = document.createElement("div");
-            item.className = "source-item";
+            item.className = "source-item source-" + info.status.toLowerCase();
 
             var name = document.createElement("div");
             name.className = "source-name";
-            name.textContent = s.label;
+            name.textContent = source.label;
+
+            var provider = document.createElement("div");
+            provider.className = "source-provider";
+            provider.textContent = source.provider;
 
             var status = document.createElement("div");
             status.className = "source-status st-" + info.status.toLowerCase();
@@ -1044,11 +1108,17 @@
 
             var note = document.createElement("div");
             note.className = "source-note";
-            note.textContent = info.note || (info.status === "UNAVAILABLE" ? "Currently unreachable" : "");
+            note.textContent = info.message;
+
+            var updated = document.createElement("div");
+            updated.className = "source-updated";
+            updated.textContent = info.latest ? "Last successful update: " + fmtShortTime(info.latest) : "Last successful update: --";
 
             item.appendChild(name);
+            item.appendChild(provider);
             item.appendChild(status);
             item.appendChild(note);
+            item.appendChild(updated);
             box.appendChild(item);
         });
     }
