@@ -12,6 +12,7 @@
  *   - api/weather.php
  *   - api/traffic.php
  *   - api/incidents.php
+ *   - api/air-quality.php
  *   - api/analyze.php
  *   - api/normalized-data.php
  */
@@ -83,6 +84,14 @@
                 <p class="card-updated">Updated: <span id="incidents-updated">--</span></p>
             </article>
 
+            <article class="card status-card" data-card="air_quality">
+                <h2>AIR QUALITY</h2>
+                <div class="card-badge" id="air-quality-badge"></div>
+                <div class="card-value" id="air-quality-value">--</div>
+                <p class="card-desc" id="air-quality-desc">Loading&hellip;</p>
+                <p class="card-updated">Updated: <span id="air-quality-updated">--</span></p>
+            </article>
+
             <article class="card status-card" data-card="pulse">
                 <h2>OVERALL PULSE</h2>
                 <div class="card-badge" id="pulse-badge"></div>
@@ -101,6 +110,7 @@
                     <button type="button" class="map-filter-btn" data-filter="weather">Weather</button>
                     <button type="button" class="map-filter-btn" data-filter="traffic">Traffic</button>
                     <button type="button" class="map-filter-btn" data-filter="incident">Incidents</button>
+                    <button type="button" class="map-filter-btn" data-filter="air_quality">Air Quality</button>
                 </div>
             </div>
             <div id="cityMap" class="city-map"></div>
@@ -109,6 +119,7 @@
                 <span class="legend-item"><span class="legend-dot dot-weather"></span> Weather</span>
                 <span class="legend-item"><span class="legend-dot dot-traffic"></span> Traffic</span>
                 <span class="legend-item"><span class="legend-dot dot-incident"></span> Incident</span>
+                <span class="legend-item"><span class="legend-dot dot-air_quality"></span> Air Quality</span>
                 <span class="legend-note muted">Map tiles &copy; OpenStreetMap contributors &middot; civic data from CityPulse APIs</span>
             </div>
         </section>

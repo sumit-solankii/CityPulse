@@ -7,8 +7,9 @@
      - api/weather.php         (weather card)
      - api/traffic.php         (traffic card)
      - api/incidents.php       (incidents card)
+     - api/air-quality.php     (air quality card)
      - api/analyze.php         (area pulse, what's happening)
-     - api/normalized-data.php (recent activity, trend, sources)
+     - api/normalized-data.php (recent activity, trend, sources, map marker data)
 
    Refresh: every 30 seconds, only the data sections update
    (no full page reload). Each section fails gracefully.
@@ -22,6 +23,7 @@
     var INCIDENTS_HIGH_AT = 20;
     var MAX_SOURCE_AGE_LIVE_MIN = 60;      // sources with data newer than this = LIVE
     var MAX_WEATHER_AGE_LIVE_MIN = 30;     // weather updates every ~10 minutes
+    var MAX_AIR_QUALITY_AGE_LIVE_MIN = 20; // air quality stores a reading every ~15 minutes
     var REFRESH_INTERVAL_MS = 30000;       // 30 seconds
     var RECENT_ACTIVITY_LIMIT = 10;
     var TREND_HOURS = 8;
@@ -33,7 +35,8 @@
     var MARKER_OFFSET = {
         weather:  { lat: 0,      lng: 0 },
         traffic:  { lat: 0,      lng: 0.0008 },
-        incident: { lat: 0,      lng: -0.0008 }
+        incident: { lat: 0,      lng: -0.0008 },
+        air_quality: { lat: 0.0016, lng: 0.0016 }
     };
     var map = null;
     var mapGroups = null;
@@ -43,6 +46,7 @@
         weather: null,
         traffic: null,
         incidents: null,
+        airQuality: null,
         analysis: null,
         normalized: null
     };
@@ -173,6 +177,32 @@
         setText("incidents-value", count + " reports");
         setText("incidents-desc", "Total incident reports");
         setText("incidents-updated", fmtShortTime(inc[0].recorded_at));
+    }
+
+    function renderAirQuality() {
+        var aq = state.airQuality;
+        var badgeEl = el("air-quality-badge");
+
+        if (!aq || !aq.success || !aq.measurements) {
+            badgeEl.innerHTML = "";
+            badgeEl.appendChild(badge("Unavailable", "st-unavailable"));
+            setText("air-quality-value", "Air quality data unavailable");
+            setText("air-quality-desc", "Air quality data unavailable");
+            setText("air-quality-updated", "--");
+            return;
+        }
+
+        var m = aq.measurements;
+        var pm25 = typeof m.pm25 === "number" && isFinite(m.pm25) ? m.pm25 : null;
+        var pm10 = typeof m.pm10 === "number" && isFinite(m.pm10) ? m.pm10 : null;
+
+        badgeEl.innerHTML = "";
+        badgeEl.appendChild(severityBadge(aq.severity));
+        setText("air-quality-value", pm25 === null ? "n/a" : pm25 + " µg/m³");
+        setText("air-quality-desc", pm10 === null
+            ? "No PM10 data"
+            : "PM10: " + pm10 + " µg/m³");
+        setText("air-quality-updated", fmtShortTime(aq.recorded_at));
     }
 
     function renderPulse() {
@@ -413,9 +443,10 @@
         box.innerHTML = "";
 
         var sources = [
-            { label: "Weather",   payload: state.weather,   isArray: false, maxAge: MAX_WEATHER_AGE_LIVE_MIN },
-            { label: "Traffic",   payload: state.traffic,   isArray: true,  maxAge: MAX_SOURCE_AGE_LIVE_MIN },
-            { label: "Incidents", payload: state.incidents, isArray: true,  maxAge: MAX_SOURCE_AGE_LIVE_MIN }
+            { label: "Weather",     payload: state.weather,     isArray: false, maxAge: MAX_WEATHER_AGE_LIVE_MIN },
+            { label: "Traffic",     payload: state.traffic,     isArray: true,  maxAge: MAX_SOURCE_AGE_LIVE_MIN },
+            { label: "Incidents",   payload: state.incidents,   isArray: true,  maxAge: MAX_SOURCE_AGE_LIVE_MIN },
+            { label: "Air Quality", payload: state.airQuality,  isArray: false, maxAge: MAX_AIR_QUALITY_AGE_LIVE_MIN }
         ];
 
         sources.forEach(function (s) {
@@ -468,6 +499,9 @@
         } else if (record.source === "traffic") {
             valueLabel = "Delay";
             valueText = record.value + " min";
+        } else if (record.source === "air_quality") {
+            valueLabel = "PM2.5";
+            valueText = record.value + " µg/m³";
         } else {
             valueLabel = "Type";
             valueText = record.value;
@@ -527,7 +561,8 @@
         mapGroups = {
             weather: L.layerGroup(),
             traffic: L.layerGroup(),
-            incident: L.layerGroup()
+            incident: L.layerGroup(),
+            air_quality: L.layerGroup()
         };
 
         // Filter buttons - show/hide marker groups without reloading the page.
@@ -583,18 +618,21 @@
             fetchJson("api/weather.php"),
             fetchJson("api/traffic.php"),
             fetchJson("api/incidents.php"),
+            fetchJson("api/air-quality.php"),
             fetchJson("api/analyze.php"),
             fetchJson("api/normalized-data.php")
         ]).then(function (results) {
             state.weather    = results[0].status === "fulfilled" ? results[0].value : null;
             state.traffic    = results[1].status === "fulfilled" ? results[1].value : null;
             state.incidents  = results[2].status === "fulfilled" ? results[2].value : null;
-            state.analysis   = results[3].status === "fulfilled" ? results[3].value : null;
-            state.normalized = results[4].status === "fulfilled" ? results[4].value : null;
+            state.airQuality = results[3].status === "fulfilled" ? results[3].value : null;
+            state.analysis   = results[4].status === "fulfilled" ? results[4].value : null;
+            state.normalized = results[5].status === "fulfilled" ? results[5].value : null;
 
             renderWeather();
             renderTraffic();
             renderIncidents();
+            renderAirQuality();
             renderPulse();
             renderHappening();
             renderRecent();

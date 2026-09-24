@@ -2,17 +2,17 @@
 /**
  * CityPulse - Normalized Data API (Step 5)
  *
- * Fetches the latest records from weather_data, traffic_data and
- * incidents, and combines them into ONE common structure so every
- * civic feed looks the same:
+ * Fetches the latest records from weather_data, traffic_data,
+ * incidents and air_quality_data, and combines them into ONE common
+ * structure so every civic feed looks the same:
  *
  *   {
- *     "source":      "weather" | "traffic" | "incident",
+ *     "source":      "weather" | "traffic" | "incident" | "air_quality",
  *     "event_type":  same as source,
  *     "location":    area name,
  *     "latitude":    ...,
  *     "longitude":   ...,
- *     "value":       temperature / delay_minutes / incident_type,
+ *     "value":       temperature / delay_minutes / incident_type / pm25,
  *     "severity":    NORMAL | MODERATE | HIGH,
  *     "timestamp":   "Y-m-d H:i:s"
  *   }
@@ -21,6 +21,9 @@
  *   - Every source uses the same field name "timestamp" (the raw
  *     recorded_at value is copied into it).
  *   - Severity values are normalized to NORMAL / MODERATE / HIGH.
+ *   - Air quality uses PM2.5 as its primary "value" (the detailed
+ *     PM10 / NO2 / O3 readings stay in api/air-quality.php and in
+ *     the air_quality_data table).
  *   - No new database table: normalization happens on the fly, so
  *     data is never duplicated.
  *
@@ -54,6 +57,7 @@ $records = [];
 $weatherCount = 0;
 $trafficCount = 0;
 $incidentCount = 0;
+$airQualityCount = 0;
 $latestTimestamp = null;
 
 // ------------------------------------------------------------
@@ -147,7 +151,37 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 // ------------------------------------------------------------
-// 4) Send the normalized array + a small summary.
+// 4) Air quality -> value = pm25 (µg/m³)
+// ------------------------------------------------------------
+$result = mysqli_query($conn, 'SELECT location, latitude, longitude, pm25, severity, recorded_at FROM air_quality_data ORDER BY recorded_at DESC LIMIT 100');
+
+if (!$result) {
+    error_log('CityPulse normalized-data air_quality query failed: ' . mysqli_error($conn));
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'Could not load normalized data. Please try again later.']);
+    exit;
+}
+
+while ($row = mysqli_fetch_assoc($result)) {
+    $records[] = [
+        'source'     => 'air_quality',
+        'event_type' => 'air_quality',
+        'location'   => $row['location'],
+        'latitude'   => (float) $row['latitude'],
+        'longitude'  => (float) $row['longitude'],
+        'value'      => (float) $row['pm25'],
+        'severity'   => normalize_severity($row['severity']),
+        'timestamp'  => $row['recorded_at'],
+    ];
+    $airQualityCount++;
+    if ($latestTimestamp === null || $row['recorded_at'] > $latestTimestamp) {
+        $latestTimestamp = $row['recorded_at'];
+    }
+}
+
+// ------------------------------------------------------------
+// 5) Send the normalized array + a small summary.
 // ------------------------------------------------------------
 header('Content-Type: application/json');
 echo json_encode([
@@ -159,6 +193,7 @@ echo json_encode([
         'weather_record_count'   => $weatherCount,
         'traffic_record_count'   => $trafficCount,
         'incident_record_count'  => $incidentCount,
+        'air_quality_record_count' => $airQualityCount,
         'latest_timestamp'       => $latestTimestamp, // null when there is no data at all
     ],
 ], JSON_PRETTY_PRINT);

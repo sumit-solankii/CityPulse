@@ -94,3 +94,29 @@ CREATE TABLE IF NOT EXISTS incidents (
     KEY idx_incidents_recorded_at (recorded_at),
     KEY idx_incidents_location_recorded_at (location, recorded_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+
+-- ============================================================
+-- Table: air_quality_data (Step 9)
+-- Stores air-quality readings (PM2.5, PM10, NO2, O3) fetched from
+-- the OpenAQ API for city locations.
+--   - pm25 is the primary value and is always stored.
+--   - pm10 / no2 / o3 are NULL when a station did not report them
+--     (a missing pollutant is NOT an error).
+--   - severity uses the standard NORMAL / MODERATE / HIGH set.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS air_quality_data (
+    id          INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+    location    VARCHAR(100)  NOT NULL,                     -- neighborhood / area name (e.g. "Jaipur")
+    latitude    DECIMAL(9, 6) NOT NULL,                     -- GPS latitude (station or area centre)
+    longitude   DECIMAL(9, 6) NOT NULL,                     -- GPS longitude
+    pm25        DECIMAL(6, 1) NOT NULL,                     -- PM2.5 in µg/m³ (primary value)
+    pm10        DECIMAL(6, 1) NULL,                         -- PM10 in µg/m³ (NULL when unavailable)
+    no2         DECIMAL(6, 1) NULL,                         -- NO2 in µg/m³ (NULL when unavailable)
+    o3          DECIMAL(6, 1) NULL,                         -- O3 in µg/m³ (NULL when unavailable)
+    severity    VARCHAR(20)   NOT NULL,                     -- NORMAL | MODERATE | HIGH
+    recorded_at TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP, -- when the reading was taken
+    PRIMARY KEY (id),
+    KEY idx_air_quality_location (location),
+    KEY idx_air_quality_recorded_at (recorded_at),
+    KEY idx_air_quality_location_recorded_at (location, recorded_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci;

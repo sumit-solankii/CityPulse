@@ -500,9 +500,10 @@ body.dashboard-page {
     margin-left: auto;
 }
 
-.dot-weather  { background: #facc15; }
-.dot-traffic  { background: #fb923c; }
-.dot-incident { background: #f87171; }
+.dot-weather    { background: #facc15; }
+.dot-traffic    { background: #fb923c; }
+.dot-incident   { background: #f87171; }
+.dot-air_quality { background: #22d3ee; }
 
 /* Custom marker dots (divIcon wrapper) */
 .cp-marker {
