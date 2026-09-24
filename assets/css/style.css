@@ -1,0 +1,175 @@
+/* ============================================================
+   CityPulse - Global Styles
+   Dark civic-tech theme: dark background, white text,
+   yellow accent, gray secondary text.
+   ============================================================ */
+
+:root {
+    --color-bg:    #0b0b0d;  /* near-black background  */
+    --color-bg-alt: #131316; /* slightly lighter panel  */
+    --color-text:  #ffffff;  /* primary text           */
+    --color-muted: #9ca3af;  /* secondary gray text    */
+    --color-accent: #facc15; /* yellow accent          */
+    --color-border: #26262b; /* subtle borders         */
+    --radius: 10px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: "Segoe UI", system-ui, Arial, Helvetica, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---------- Navigation ---------- */
+
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg-alt);
+}
+
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-text);
+    font-size: 1.25rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.brand-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--color-accent);
+}
+
+.nav-links {
+    list-style: none;
+    display: flex;
+    gap: 1.5rem;
+}
+
+.nav-links a {
+    color: var(--color-muted);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.nav-links a:hover {
+    color: var(--color-text);
+}
+
+.nav-links a.active {
+    color: var(--color-accent);
+}
+
+/* ---------- Landing hero ---------- */
+
+.hero {
+    flex: 1;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 6rem 2rem;
+    text-align: center;
+}
+
+.hero-title {
+    font-size: clamp(3rem, 8vw, 5rem);
+    letter-spacing: 0.02em;
+}
+
+.hero-tagline {
+    margin-top: 0.75rem;
+    font-size: clamp(1.1rem, 3vw, 1.5rem);
+    font-weight: 600;
+    color: var(--color-accent);
+}
+
+.hero-description {
+    max-width: 640px;
+    margin: 1.5rem auto 0;
+    font-size: 1.05rem;
+    color: var(--color-muted);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn-primary {
+    display: inline-block;
+    margin-top: 2.5rem;
+    padding: 0.9rem 2.2rem;
+    background-color: var(--color-accent);
+    color: var(--color-bg);
+    font-weight: 700;
+    font-size: 1.05rem;
+    text-decoration: none;
+    border-radius: var(--radius);
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.btn-primary:hover {
+    background-color: #fde047;
+    transform: translateY(-2px);
+}
+
+.btn-secondary {
+    display: inline-block;
+    margin-top: 2rem;
+    padding: 0.7rem 1.6rem;
+    color: var(--color-text);
+    text-decoration: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    transition: border-color 0.2s ease;
+}
+
+.btn-secondary:hover {
+    border-color: var(--color-accent);
+}
+
+/* ---------- Generic pages ---------- */
+
+.page {
+    flex: 1;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 4rem 2rem;
+}
+
+.page h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.muted {
+    color: var(--color-muted);
+}
+
+/* ---------- Footer ---------- */
+
+.footer {
+    padding: 1.25rem 2rem;
+    text-align: center;
+    border-top: 1px solid var(--color-border);
+}
+
+.footer p {
+    color: var(--color-muted);
+    font-size: 0.9rem;
+}
