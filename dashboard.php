@@ -180,6 +180,17 @@
                 <p class="card-desc" id="pulse-card-desc">Loading&hellip;</p>
                 <p class="card-updated">Analysis: <span id="pulse-updated">--</span></p>
             </article>
+
+            <article class="card status-card score-card" data-card="pulse-score">
+                <div class="score-title-row">
+                    <h2>AREA PULSE SCORE</h2>
+                    <span class="score-info" title="Pulse Score reflects current monitored conditions. It is not a prediction." aria-label="Pulse Score reflects current monitored conditions. It is not a prediction.">i</span>
+                </div>
+                <div class="card-badge" id="pulse-score-badge"></div>
+                <div class="card-value" id="pulse-score-value">--/100</div>
+                <p class="card-desc" id="pulse-score-desc">Based on current monitored civic conditions.</p>
+                <p class="card-updated">Area: <span id="pulse-score-area">All Areas</span></p>
+            </article>
         </section>
 
         <!-- Interactive civic map (Leaflet + OpenStreetMap) -->

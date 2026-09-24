@@ -512,6 +512,34 @@ body.dashboard-page {
     min-height: 1.4rem;
 }
 
+.score-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.score-title-row h2 {
+    margin-bottom: 0;
+}
+
+.score-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    color: var(--muted);
+    font-size: 0.7rem;
+    cursor: help;
+}
+
+.score-card .card-value {
+    color: var(--accent);
+}
+
 .card-value {
     font-size: 1.7rem;
     font-weight: 700;

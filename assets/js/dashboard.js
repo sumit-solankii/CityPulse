@@ -391,6 +391,7 @@
         renderIncidents();
         renderAirQuality();
         renderPulse();
+        renderPulseScore();
         renderSummary();
         renderInsight(false);
         renderAlerts();
@@ -1011,6 +1012,90 @@
         setText("pulse-card-value", pulse);
         setText("pulse-card-desc", highCount + " high-severity anomaly(s), " + a.anomalies.length + " total");
         setText("pulse-updated", fmtShortTime(a.analysis_time));
+    }
+
+    // Area Pulse Score: each available source contributes at most 25%.
+    // NORMAL=0 risk, MODERATE=0.5 risk, HIGH=1 risk; higher risk lowers the score.
+    function severityRisk(value) {
+        var severity = normalizeSeverity(value);
+        if (severity === "HIGH") return 1;
+        if (severity === "MODERATE") return 0.5;
+        return 0;
+    }
+
+    function latestByLocation(records) {
+        var latest = {};
+        (Array.isArray(records) ? records : []).forEach(function (record) {
+            if (!record || !record.location || !record.recorded_at) return;
+            if (!latest[record.location] || record.recorded_at > latest[record.location].recorded_at) {
+                latest[record.location] = record;
+            }
+        });
+        return Object.keys(latest).map(function (location) { return latest[location]; });
+    }
+
+    function calculatePulseScore(view) {
+        var components = [];
+        var traffic = latestByLocation(view.traffic);
+        if (traffic.length) {
+            var trafficRisk = traffic.reduce(function (total, record) {
+                return total + severityRisk(record.severity);
+            }, 0) / traffic.length;
+            components.push(trafficRisk);
+        }
+
+        var incidents = Array.isArray(view.incidents) ? view.incidents : [];
+        if (incidents.length) {
+            var incidentAverageRisk = incidents.reduce(function (total, record) {
+                return total + severityRisk(record.severity);
+            }, 0) / incidents.length;
+            var incidentCountRisk = Math.min(1, incidents.length / INCIDENTS_HIGH_AT);
+            components.push(Math.max(incidentAverageRisk, incidentCountRisk));
+        }
+
+        if (view.weather && !view.weather.error && view.weather.severity) {
+            components.push(severityRisk(view.weather.severity));
+        }
+
+        if (view.airQuality && view.airQuality.success && view.airQuality.severity) {
+            components.push(severityRisk(view.airQuality.severity));
+        }
+
+        if (components.length < 2) return null;
+
+        var averageRisk = components.reduce(function (total, risk) { return total + risk; }, 0) / components.length;
+        var score = Math.round((1 - averageRisk) * 100);
+        return Math.max(0, Math.min(100, score));
+    }
+
+    function pulseScoreStatus(score) {
+        if (score >= 90) return { label: "NORMAL", className: "st-normal" };
+        if (score >= 70) return { label: "LOW-MODERATE ACTIVITY", className: "st-moderate" };
+        if (score >= 40) return { label: "MODERATE ACTIVITY", className: "st-moderate" };
+        return { label: "HIGH ACTIVITY", className: "st-high" };
+    }
+
+    function renderPulseScore() {
+        var view = activeView();
+        var scoreValue = el("pulse-score-value");
+        var badgeEl = el("pulse-score-badge");
+        if (!scoreValue || !badgeEl) return;
+
+        setText("pulse-score-area", state.selectedArea === "ALL" ? "All Areas" : state.selectedArea);
+        var score = state.selectedArea !== "ALL" && !view.hasData ? null : calculatePulseScore(view);
+        if (score === null) {
+            scoreValue.textContent = "Insufficient data";
+            badgeEl.innerHTML = "";
+            badgeEl.appendChild(badge("INSUFFICIENT DATA", "st-unavailable"));
+            setText("pulse-score-desc", "At least two usable civic data sources are required.");
+            return;
+        }
+
+        var status = pulseScoreStatus(score);
+        scoreValue.textContent = score + "/100";
+        badgeEl.innerHTML = "";
+        badgeEl.appendChild(badge(status.label, status.className));
+        setText("pulse-score-desc", "Based on current monitored civic conditions. Not a prediction.");
     }
 
     // ---------- What's Happening? ----------
