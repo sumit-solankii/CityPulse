@@ -70,6 +70,15 @@
             <p id="pulse-hint" class="muted">Loading&hellip;</p>
         </section>
 
+        <section class="card summary-card" aria-live="polite">
+            <div class="summary-header">
+                <h2>City Pulse Summary</h2>
+                <span id="summary-status" class="badge st-normal">NORMAL</span>
+            </div>
+            <p id="city-pulse-summary" class="summary-text">Loading summary&hellip;</p>
+            <p class="summary-meta">Last updated: <span id="summary-updated">--</span></p>
+        </section>
+
         <!-- Four civic status cards -->
         <section class="cards-grid" aria-label="Civic status cards">
             <article class="card status-card" data-card="weather">

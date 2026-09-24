@@ -330,12 +330,128 @@
         renderIncidents();
         renderAirQuality();
         renderPulse();
+        renderSummary();
         renderHappening();
         renderRecent();
         renderTrend();
         renderSources();
         updateMapMarkers();
         setText("last-updated", fmtTime(new Date()));
+    }
+
+    function uniqueLocations(items, limit) {
+        var result = [];
+        var seen = {};
+        (items || []).forEach(function (item) {
+            var loc = item && item.location ? item.location : null;
+            if (!loc || seen[loc]) return;
+            seen[loc] = true;
+            result.push(loc);
+            if (limit && result.length >= limit) return;
+        });
+        return result;
+    }
+
+    function summaryTextForLocations(pulse, data, signalLocations) {
+        var pulseText = pulse || "NORMAL";
+        var locs = signalLocations && signalLocations.length ? signalLocations : ["Jaipur"];
+        var areaText = locs.join(", ");
+
+        if (pulseText === "NORMAL") {
+            return "City conditions are currently normal. No significant anomalies have been detected.";
+        }
+
+        if (pulseText === "MODERATE") {
+            var sentences = ["Moderate activity is being observed."];
+            var trafficText = "Traffic has increased in " + areaText + ".";
+            if (data && data.analysis && data.analysis.anomalies) {
+                var trafficAnomalies = data.analysis.anomalies.filter(function (an) { return an.type === "traffic"; });
+                if (trafficAnomalies.length) {
+                    trafficText = "Traffic has increased in " + uniqueLocations(trafficAnomalies, 2).join(", ") + ".";
+                }
+            }
+            var airText = "Air quality is showing moderate levels.";
+            if (data && data.airQuality && data.airQuality.severity && data.airQuality.severity !== "NORMAL") {
+                airText = "Air quality is showing " + data.airQuality.severity.toLowerCase() + " levels.";
+            }
+            var extraText = "Recent incidents are also concentrated in the same area.";
+            if (data && data.incidents && data.incidents.length) {
+                var incidentLocs = uniqueLocations(data.incidents, 2);
+                if (incidentLocs.length) {
+                    extraText = "Recent incidents are being reported around " + incidentLocs.join(", ") + ".";
+                }
+            }
+            sentences.push(trafficText + " " + airText + " " + extraText);
+            return sentences.join(" ");
+        }
+
+        var weatherText = "Heavy weather conditions are affecting the monitored area.";
+        var trafficText = "Traffic is significantly elevated.";
+        var incidentText = "Multiple incidents are being reported.";
+        var locList = locs.length > 1 ? locs.slice(0, 2).join(" and ") : locs[0];
+
+        if (data && data.analysis && data.analysis.anomalies) {
+            var weatherAnoms = data.analysis.anomalies.filter(function (an) { return an.type === "weather"; });
+            if (weatherAnoms.length) {
+                weatherText = "Heavy weather conditions are affecting " + uniqueLocations(weatherAnoms, 2).join(", ") + ".";
+            }
+            var trafficAnoms = data.analysis.anomalies.filter(function (an) { return an.type === "traffic"; });
+            if (trafficAnoms.length) {
+                trafficText = "Traffic is significantly elevated in " + uniqueLocations(trafficAnoms, 2).join(", ") + ".";
+            }
+            var incidentAnoms = data.analysis.anomalies.filter(function (an) { return an.type === "incident"; });
+            if (incidentAnoms.length) {
+                incidentText = "Multiple incidents are being reported in " + uniqueLocations(incidentAnoms, 2).join(", ") + ".";
+            }
+        }
+
+        var highSentence = "High activity is currently being observed. " + weatherText + " " + trafficText + " " + incidentText;
+        var correlationSentence = "";
+        if (data && data.analysis && data.analysis.correlations && data.analysis.correlations.length) {
+            var corr = data.analysis.correlations[0];
+            var corrLoc = corr.location || locList;
+            correlationSentence = "Traffic activity coincides with rainfall in " + corrLoc + ".";
+            if (corr.events && corr.events.indexOf("incident") !== -1) {
+                correlationSentence = "Incidents are occurring near areas with increased traffic in " + corrLoc + ".";
+            }
+            if (corr.events && corr.events.indexOf("air_quality") !== -1) {
+                correlationSentence = "Air quality changes coincide with increased activity in " + corrLoc + ".";
+            }
+        }
+        return highSentence + (correlationSentence ? " " + correlationSentence : "");
+    }
+
+    function renderSummary() {
+        var summaryEl = el("city-pulse-summary");
+        var statusEl = el("summary-status");
+        var timeEl = el("summary-updated");
+
+        if (!summaryEl || !statusEl || !timeEl) return;
+
+        if (state.demoMode) {
+            var demoText = state.demoScenario === DEMO_SCENARIOS.MODERATE ? "Simulated data for demonstration" : (state.demoScenario === DEMO_SCENARIOS.HIGH_ACTIVITY ? "Simulated data for demonstration" : "Simulated data for demonstration");
+            var summary = summaryTextForLocations(state.analysis && state.analysis.area_pulse ? state.analysis.area_pulse : "NORMAL", state, ["Jaipur", "Zone A", "Zone C"]);
+            summaryEl.textContent = summary + " " + demoText;
+            statusEl.textContent = demoLabel(state.demoScenario);
+            statusEl.className = "badge st-demo";
+            timeEl.textContent = fmtTime(new Date());
+            return;
+        }
+
+        if (!state.analysis || !state.analysis.success) {
+            summaryEl.textContent = "City Pulse summary is temporarily unavailable.";
+            statusEl.textContent = "N/A";
+            statusEl.className = "badge st-unavailable";
+            timeEl.textContent = "--";
+            return;
+        }
+
+        var pulse = state.analysis.area_pulse || "NORMAL";
+        var summary = summaryTextForLocations(pulse, state, uniqueLocations(state.normalized && state.normalized.data ? state.normalized.data : [], 3));
+        summaryEl.textContent = summary;
+        statusEl.textContent = pulse;
+        statusEl.className = "badge st-" + pulse.toLowerCase();
+        timeEl.textContent = fmtShortTime((state.analysis && state.analysis.analysis_time) || new Date().toISOString().slice(0,19).replace("T"," "));
     }
 
     // ---------- card renderers (each fails on its own) ----------
