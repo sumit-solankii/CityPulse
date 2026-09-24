@@ -10,7 +10,9 @@
  *
  * Note: air quality needs an OpenAQ API key. Add yours in
  * config/api_config.php (server-side only). Until a key is set,
- * the page shows "Air quality data temporarily unavailable."
+ * the page shows "OpenAQ API key is missing." together with a safe
+ * debug block (HTTP status, cURL error, OpenAQ error message and the
+ * requested URL - never the API key itself).
  */
 ?>
 <!DOCTYPE html>
@@ -43,6 +45,16 @@
         .status-line { color: #9ca3af; margin-top: 0.5rem; }
         #message { margin: 1rem 0; }
         .error { color: #f87171; }
+        .debug-block {
+            border: 1px solid #26262b;
+            border-radius: 10px;
+            background: #131316;
+            padding: 0.75rem 1rem;
+            margin-top: 0.75rem;
+            max-width: 720px;
+        }
+        .debug-block .error { color: #f87171; }
+        .debug-block .value { word-break: break-all; }
     </style>
 </head>
 <body>
@@ -106,6 +118,20 @@
                         if (!data.success) {
                             messageEl.className = "error";
                             messageEl.textContent = data.message || "Air quality data temporarily unavailable.";
+
+                            // Safe diagnostics from the API. The API key is
+                            // never part of this object.
+                            if (data.debug) {
+                                var d = data.debug;
+                                var dbg = document.createElement("div");
+                                dbg.className = "debug-block";
+                                dbg.appendChild(row("HTTP status",
+                                    (d.http_status === null || d.http_status === undefined) ? "n/a" : d.http_status));
+                                dbg.appendChild(row("cURL error", d.curl_error || "n/a"));
+                                dbg.appendChild(row("OpenAQ error", d.api_error_message || "n/a"));
+                                dbg.appendChild(row("Requested URL", d.api_url_without_api_key || "n/a"));
+                                messageEl.appendChild(dbg);
+                            }
                             return;
                         }
 

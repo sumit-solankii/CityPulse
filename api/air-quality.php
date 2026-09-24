@@ -23,6 +23,13 @@
  *
  * Missing pollutants at a station are NOT an error - the missing
  * entry is simply returned as null and the rest of the data is kept.
+ *
+ * Debugging: the HTTP calls use PHP cURL. When a request fails, the
+ * JSON response carries a safe "debug" object (http_status,
+ * curl_error, api_error_message, api_url_without_api_key) so the
+ * reason is visible in the browser. The API key is sent ONLY in the
+ * "X-API-Key" request header - it never appears in a URL, in the
+ * JSON response, in HTML or in JavaScript.
  */
 
 // Keep PHP warnings/notices out of the JSON response.
@@ -72,35 +79,104 @@ $AQ_THRESHOLDS = [
 // ------------------------------------------------------------
 
 /**
- * Call the OpenAQ API with the X-API-Key header and return
- * [status => HTTP status code, body => raw response].
+ * Call the OpenAQ API with PHP cURL and return
+ * [status => HTTP status code, body => raw response, curl_error => message].
+ *
+ * The API key is sent only in the "X-API-Key" request header, so the
+ * URL itself is always safe to log or to show in the debug output.
+ *
+ * status is 0 when the request never completed (DNS, timeout, SSL, ...);
+ * in that case curl_error explains why.
  */
 function air_quality_fetch($url)
 {
-    $context = stream_context_create([
-        'http' => [
-            'timeout'      => 12,
-            'ignore_errors' => true,
-            'user_agent'   => 'CityPulse local dev (XAMPP)',
-            'header'       => 'X-API-Key: ' . OPENAQ_API_KEY . "\r\n",
-        ],
+    $result = ['status' => 0, 'body' => '', 'curl_error' => ''];
+
+    if (!function_exists('curl_init')) {
+        $result['curl_error'] = 'The PHP cURL extension is not enabled in php.ini.';
+        return $result;
+    }
+
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 12,
+        CURLOPT_CONNECTTIMEOUT => 8,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_USERAGENT      => 'CityPulse local dev (XAMPP)',
+        CURLOPT_HTTPHEADER     => ['X-API-Key: ' . OPENAQ_API_KEY],
     ]);
 
-    $body = @file_get_contents($url, false, $context);
+    $body = curl_exec($ch);
 
-    // file_get_contents fills $http_response_header with the HTTP
-    // response lines when the URL uses http/https.
-    $status = 0;
-    if (is_array($http_response_header)) {
-        foreach ($http_response_header as $line) {
-            if (preg_match('#^HTTP/\S+\s+(\d{3})#', $line, $m)) {
-                $status = (int) $m[1];
-                break;
-            }
+    $result['status'] = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $result['body']   = is_string($body) ? $body : '';
+
+    // curl_errno() is non-zero for DNS/timeout/SSL failures. cURL also
+    // reports an error for some HTTP-level problems, so we store it
+    // whenever it is present - it never contains the API key.
+    if (curl_errno($ch) !== 0) {
+        $result['curl_error'] = curl_error($ch);
+    }
+
+    curl_close($ch);
+
+    return $result;
+}
+
+/**
+ * Pull the human-readable error message out of an OpenAQ error body.
+ * OpenAQ uses several shapes, all of which we handle:
+ *   {"message": "Unauthorized. ..."}          (missing API key)
+ *   {"detail": "Invalid credentials"}         (wrong API key)
+ *   {"detail": [{"msg": "...", ...}]}       (validation error)
+ * Returns '' when the body carries no such message.
+ */
+function air_quality_api_error_message($body)
+{
+    if (!is_string($body) || $body === '') {
+        return '';
+    }
+
+    $data = json_decode($body, true);
+    if (!is_array($data)) {
+        return '';
+    }
+
+    // "message", "error" and a plain string "detail".
+    foreach (['message', 'error', 'detail'] as $key) {
+        if (isset($data[$key]) && is_string($data[$key]) && $data[$key] !== '') {
+            return $data[$key];
         }
     }
 
-    return ['status' => $status, 'body' => $body];
+    // Validation errors look like {"detail": [{"msg": "...", ...}]}.
+    if (isset($data['detail'][0]['msg']) && is_string($data['detail'][0]['msg'])) {
+        return $data['detail'][0]['msg'];
+    }
+
+    return '';
+}
+
+/**
+ * Build the safe debug object returned when a request fails.
+ *
+ * It contains ONLY these four keys, and never the API key:
+ *   - http_status             (null when no HTTP response arrived)
+ *   - curl_error              (null when cURL reported no error)
+ *   - api_error_message       (null when OpenAQ sent no error message)
+ *   - api_url_without_api_key (the URL we called - the key is in a header)
+ */
+function air_quality_debug($url, $status = 0, $curlError = '', $body = '')
+{
+    $apiError = air_quality_api_error_message($body);
+
+    return [
+        'http_status'             => ((int) $status) > 0 ? (int) $status : null,
+        'curl_error'              => (is_string($curlError) && $curlError !== '') ? $curlError : null,
+        'api_error_message'       => $apiError !== '' ? $apiError : null,
+        'api_url_without_api_key' => $url,
+    ];
 }
 
 /**
@@ -141,18 +217,28 @@ function air_quality_severity($measurements)
 }
 
 /**
- * Friendly failure response. Kept generic on purpose - we never
- * expose the API key or OpenAQ's raw error details.
+ * Friendly failure response.
+ *
+ * The message is a short, safe explanation and the optional $debug
+ * object explains the failed request. Neither ever contains the API
+ * key, so the JSON is safe to view in the browser.
  */
-function air_quality_fail()
+function air_quality_fail($message = 'Air quality data temporarily unavailable.', $debug = null)
 {
     http_response_code(200); // graceful: the dashboard can still render
     header('Content-Type: application/json');
-    echo json_encode([
+
+    $payload = [
         'success' => false,
         'source'  => 'OpenAQ',
-        'message' => 'Air quality data temporarily unavailable.',
-    ], JSON_PRETTY_PRINT);
+        'message' => $message,
+    ];
+
+    if (is_array($debug)) {
+        $payload['debug'] = $debug;
+    }
+
+    echo json_encode($payload, JSON_PRETTY_PRINT);
     exit;
 }
 
@@ -211,12 +297,6 @@ if ($freshRow !== null && (time() - strtotime($freshRow['recorded_at'])) < AIR_Q
 // 2) No fresh row - ask OpenAQ for data near Jaipur.
 // ------------------------------------------------------------
 
-// The API key must be configured before we can talk to OpenAQ.
-if (OPENAQ_API_KEY === '' || OPENAQ_API_KEY === 'YOUR_OPENAQ_API_KEY_HERE') {
-    error_log('CityPulse air-quality: OPENAQ_API_KEY is not configured yet. Add it in config/api_config.php.');
-    air_quality_fail();
-}
-
 // 2a) Find monitoring stations near Jaipur that measure our pollutants.
 $locationsUrl = 'https://api.openaq.org/v3/locations'
     . '?coordinates=' . AIR_QUALITY_LATITUDE . ',' . AIR_QUALITY_LONGITUDE
@@ -224,16 +304,33 @@ $locationsUrl = 'https://api.openaq.org/v3/locations'
     . '&parameters_id=' . OPENAQ_PARAMETER_IDS
     . '&limit=25';
 
+// The API key must be configured before we can talk to OpenAQ.
+if (OPENAQ_API_KEY === '' || OPENAQ_API_KEY === 'YOUR_OPENAQ_API_KEY_HERE') {
+    error_log('CityPulse air-quality: OPENAQ_API_KEY is not configured yet. Add it in config/api_config.php.');
+    air_quality_fail('OpenAQ API key is missing.', air_quality_debug($locationsUrl));
+}
+
 $locationsCall = air_quality_fetch($locationsUrl);
 if ($locationsCall['status'] < 200 || $locationsCall['status'] >= 300) {
-    error_log('CityPulse air-quality: locations call failed (HTTP ' . $locationsCall['status'] . ').');
-    air_quality_fail();
+    $locationsDebug = air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body']);
+    error_log('CityPulse air-quality: locations call failed (HTTP ' . $locationsCall['status'] . ')'
+        . ' curl_error=' . $locationsCall['curl_error']
+        . ' api_error_message=' . $locationsDebug['api_error_message']);
+    air_quality_fail(
+        $locationsCall['status'] === 0
+            ? 'Could not reach the OpenAQ service.'
+            : 'OpenAQ request failed (HTTP ' . $locationsCall['status'] . ').',
+        $locationsDebug
+    );
 }
 
 $locations = air_quality_results($locationsCall['body']);
 if ($locations === null || count($locations) === 0) {
     error_log('CityPulse air-quality: no monitoring stations found near Jaipur.');
-    air_quality_fail();
+    air_quality_fail(
+        'OpenAQ returned no monitoring stations near Jaipur.',
+        air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body'])
+    );
 }
 
 // 2b) Pick the station nearest to Jaipur (the API only sorts by id,
@@ -256,7 +353,10 @@ foreach ($locations as $loc) {
 
 if ($nearest === null) {
     error_log('CityPulse air-quality: stations found, but none with usable coordinates.');
-    air_quality_fail();
+    air_quality_fail(
+        'OpenAQ returned no monitoring stations with usable coordinates near Jaipur.',
+        air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body'])
+    );
 }
 
 $stationId   = (int) $nearest['id'];
@@ -283,14 +383,25 @@ $latestUrl = 'https://api.openaq.org/v3/locations/' . $stationId . '/latest?limi
 
 $latestCall = air_quality_fetch($latestUrl);
 if ($latestCall['status'] < 200 || $latestCall['status'] >= 300) {
-    error_log('CityPulse air-quality: latest readings call failed (HTTP ' . $latestCall['status'] . ').');
-    air_quality_fail();
+    $latestDebug = air_quality_debug($latestUrl, $latestCall['status'], $latestCall['curl_error'], $latestCall['body']);
+    error_log('CityPulse air-quality: latest readings call failed (HTTP ' . $latestCall['status'] . ')'
+        . ' curl_error=' . $latestCall['curl_error']
+        . ' api_error_message=' . $latestDebug['api_error_message']);
+    air_quality_fail(
+        $latestCall['status'] === 0
+            ? 'Could not reach the OpenAQ service.'
+            : 'OpenAQ request failed (HTTP ' . $latestCall['status'] . ').',
+        $latestDebug
+    );
 }
 
 $latestResults = air_quality_results($latestCall['body']);
 if ($latestResults === null || count($latestResults) === 0) {
     error_log('CityPulse air-quality: station ' . $stationId . ' returned no latest readings.');
-    air_quality_fail();
+    air_quality_fail(
+        'OpenAQ returned no latest measurements for station ' . $stationId . '.',
+        air_quality_debug($latestUrl, $latestCall['status'], $latestCall['curl_error'], $latestCall['body'])
+    );
 }
 
 // sensorId -> latest value (keep the first occurrence for each sensor).
@@ -337,7 +448,10 @@ foreach ($measurements as $value) {
 }
 if (!$hasAny) {
     error_log('CityPulse air-quality: station ' . $stationId . ' had no usable µg/m³ values.');
-    air_quality_fail();
+    air_quality_fail(
+        'OpenAQ returned no usable measurements for Jaipur.',
+        air_quality_debug($latestUrl, $latestCall['status'], $latestCall['curl_error'], $latestCall['body'])
+    );
 }
 
 $severity   = air_quality_severity($measurements);
