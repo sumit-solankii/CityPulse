@@ -41,8 +41,15 @@
     var map = null;
     var mapGroups = null;
     var mapFilter = "all";
+    var DEMO_SCENARIOS = {
+        NORMAL: "NORMAL",
+        MODERATE: "MODERATE",
+        HIGH_ACTIVITY: "HIGH_ACTIVITY"
+    };
 
     var state = {
+        demoMode: false,
+        demoScenario: DEMO_SCENARIOS.NORMAL,
         weather: null,
         traffic: null,
         incidents: null,
@@ -111,6 +118,224 @@
     function setText(id, text) {
         var node = el(id);
         if (node) node.textContent = text;
+    }
+
+    function demoLabel(scenario) {
+        if (scenario === DEMO_SCENARIOS.MODERATE) return "MODERATE";
+        if (scenario === DEMO_SCENARIOS.HIGH_ACTIVITY) return "HIGH ACTIVITY";
+        return "NORMAL";
+    }
+
+    function renderDemoControls() {
+        var toggle = el("demo-mode-toggle");
+        var chip = el("demo-chip");
+        var controls = el("demo-controls");
+        var status = el("demo-status");
+        var scenarioButtons = document.querySelectorAll(".demo-scenario-btn");
+
+        if (toggle) {
+            toggle.classList.toggle("is-demo", state.demoMode);
+            toggle.setAttribute("aria-pressed", String(state.demoMode));
+            toggle.textContent = state.demoMode ? "Demo Mode: ON" : "Demo Mode: OFF";
+        }
+
+        if (chip) chip.classList.toggle("hidden", !state.demoMode);
+        if (controls) controls.classList.toggle("hidden", !state.demoMode);
+        if (status) {
+            status.classList.toggle("hidden", !state.demoMode);
+            status.textContent = "Selected: " + demoLabel(state.demoScenario) + " · Simulated data for demonstration";
+        }
+
+        scenarioButtons.forEach(function (btn) {
+            var active = btn.getAttribute("data-demo-scenario") === state.demoScenario;
+            btn.classList.toggle("active", active);
+        });
+    }
+
+    function formatDemoTimestamp(date) {
+        return date.toISOString().slice(0, 19).replace("T", " ");
+    }
+
+    function buildDemoScenario(scenarioName) {
+        var now = new Date();
+        var base = { recorded_at: formatDemoTimestamp(now) };
+        var weather = {};
+        var traffic = [];
+        var incidents = [];
+        var normalized = [];
+        var pulse = "NORMAL";
+        var anomalies = [];
+        var correlations = [];
+
+        if (scenarioName === DEMO_SCENARIOS.MODERATE) {
+            weather = {
+                location: "Jaipur",
+                latitude: 26.9124,
+                longitude: 75.7873,
+                temperature: 34.2,
+                relative_humidity: 58,
+                rainfall: 12.8,
+                wind_speed: 28.5,
+                weather_condition: "Partly Cloudy",
+                severity: "MODERATE",
+                recorded_at: base.recorded_at
+            };
+            traffic = [
+                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, delay_minutes: 22, traffic_level: "Moderate", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone B", latitude: 26.8980, longitude: 75.7780, delay_minutes: 12, traffic_level: "Moderate", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, delay_minutes: 28, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at }
+            ];
+            incidents = [
+                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Road Closure", description: "Road work and partial lane closures near the market route.", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone C", latitude: 26.9210, longitude: 75.8050, incident_type: "Drain Overflow", description: "Blocked drain causing standing water on the main road.", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone B", latitude: 26.8980, longitude: 75.7780, incident_type: "Street Light Outage", description: "Several street lights are malfunctioning near the residential stretch.", severity: "LOW", recorded_at: base.recorded_at }
+            ];
+            pulse = "MODERATE";
+            anomalies = [
+                { type: "traffic", location: "Zone C", severity: "HIGH", reason: "Traffic delay in Zone C is 28 minutes and congestion is rising." },
+                { type: "weather", location: "Jaipur", severity: "MODERATE", reason: "Weather conditions are warmer and wetter than a typical normal day." }
+            ];
+        } else if (scenarioName === DEMO_SCENARIOS.HIGH_ACTIVITY) {
+            weather = {
+                location: "Jaipur",
+                latitude: 26.9124,
+                longitude: 75.7873,
+                temperature: 38.6,
+                relative_humidity: 72,
+                rainfall: 33.4,
+                wind_speed: 52.2,
+                weather_condition: "Heavy Rain",
+                severity: "HIGH",
+                recorded_at: base.recorded_at
+            };
+            traffic = [
+                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, delay_minutes: 42, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone B", latitude: 26.8980, longitude: 75.7780, delay_minutes: 26, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, delay_minutes: 48, traffic_level: "Gridlock", severity: "HIGH", recorded_at: base.recorded_at }
+            ];
+            incidents = [
+                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Power Outage", description: "Multiple blocks are facing a major power disruption after recent storms.", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Water Pipeline Burst", description: "A ruptured water line is flooding the market road and nearby walkways.", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, incident_type: "Road Closure", description: "A key corridor is closed following a vehicle pile-up and debris removal work.", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 4, location: "Zone B", latitude: 26.8980, longitude: 75.7780, incident_type: "Drain Overflow", description: "Continuous rain is causing water to collect and block residential streets.", severity: "MODERATE", recorded_at: base.recorded_at }
+            ];
+            pulse = "HIGH";
+            anomalies = [
+                { type: "weather", location: "Jaipur", severity: "HIGH", reason: "Heavy rainfall and high winds are creating severe weather conditions in the city." },
+                { type: "traffic", location: "Zone A", severity: "HIGH", reason: "Traffic delay in Zone A is 42 minutes with heavy congestion across major corridors." },
+                { type: "incident", location: "Zone A", severity: "HIGH", reason: "High-severity incidents are clustered around Zone A and disrupting movement." }
+            ];
+            correlations = [
+                { type: "possible_correlation", location: "Zone A", events: ["weather", "traffic"], time_difference_minutes: 5, message: "Possible correlation detected between severe weather and sharply increased traffic delay in Zone A.", label: "POSSIBLE" },
+                { type: "possible_correlation", location: "Zone C", events: ["traffic", "incident"], time_difference_minutes: 8, message: "Traffic and incident activity increased together in Zone C during the same period.", label: "POSSIBLE" }
+            ];
+        } else {
+            weather = {
+                location: "Jaipur",
+                latitude: 26.9124,
+                longitude: 75.7873,
+                temperature: 30.8,
+                relative_humidity: 44,
+                rainfall: 1.5,
+                wind_speed: 15.4,
+                weather_condition: "Clear",
+                severity: "NORMAL",
+                recorded_at: base.recorded_at
+            };
+            traffic = [
+                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, delay_minutes: 8, traffic_level: "Light", severity: "NORMAL", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone B", latitude: 26.8980, longitude: 75.7780, delay_minutes: 6, traffic_level: "Light", severity: "NORMAL", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, delay_minutes: 10, traffic_level: "Moderate", severity: "NORMAL", recorded_at: base.recorded_at }
+            ];
+            incidents = [
+                { id: 1, location: "Zone B", latitude: 26.8980, longitude: 75.7780, incident_type: "Street Light Outage", description: "One lamp post near the residential lane is currently offline.", severity: "LOW", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Garbage Complaint", description: "Minor waste accumulation reported near the market side street.", severity: "LOW", recorded_at: base.recorded_at }
+            ];
+            pulse = "NORMAL";
+            anomalies = [];
+            correlations = [];
+        }
+
+        var airQuality = {
+            success: true,
+            source: "OpenAQ",
+            location: "Jaipur",
+            latitude: 26.9124,
+            longitude: 75.7873,
+            measurements: scenarioName === DEMO_SCENARIOS.MODERATE ? { pm25: 41.8, pm10: 96.2, no2: 52.5, o3: 84.7 } : (scenarioName === DEMO_SCENARIOS.HIGH_ACTIVITY ? { pm25: 72.9, pm10: 201.0, no2: 118.8, o3: 156.1 } : { pm25: 22.4, pm10: 51.8, no2: 28.5, o3: 48.9 }),
+            severity: scenarioName === DEMO_SCENARIOS.MODERATE ? "MODERATE" : (scenarioName === DEMO_SCENARIOS.HIGH_ACTIVITY ? "HIGH" : "NORMAL"),
+            recorded_at: base.recorded_at
+        };
+
+        var normalizedData = [];
+        var pushRecords = function (source, eventType, location, lat, lng, value, severity, ts) {
+            normalizedData.push({
+                source: source,
+                event_type: eventType,
+                location: location,
+                latitude: lat,
+                longitude: lng,
+                value: value,
+                severity: severity,
+                timestamp: ts
+            });
+        };
+
+        pushRecords("weather", "weather", weather.location, weather.latitude, weather.longitude, weather.temperature, weather.severity, weather.recorded_at);
+        traffic.forEach(function (item) {
+            pushRecords("traffic", "traffic", item.location, item.latitude, item.longitude, item.delay_minutes, item.severity, item.recorded_at);
+        });
+        incidents.forEach(function (item) {
+            pushRecords("incident", "incident", item.location, item.latitude, item.longitude, item.incident_type, item.severity, item.recorded_at);
+        });
+        pushRecords("air_quality", "air_quality", airQuality.location, airQuality.latitude, airQuality.longitude, airQuality.measurements.pm25, airQuality.severity, airQuality.recorded_at);
+
+        return {
+            weather: weather,
+            traffic: traffic,
+            incidents: incidents,
+            airQuality: airQuality,
+            analysis: {
+                success: true,
+                analysis_time: base.recorded_at,
+                area_pulse: pulse,
+                anomalies: anomalies,
+                correlations: correlations,
+                notice: "Demo scenario active: " + demoLabel(scenarioName)
+            },
+            normalized: {
+                success: true,
+                count: normalizedData.length,
+                data: normalizedData
+            }
+        };
+    }
+
+    function applyDemoData() {
+        if (!state.demoMode) return;
+        var demo = buildDemoScenario(state.demoScenario);
+        state.weather = demo.weather;
+        state.traffic = demo.traffic;
+        state.incidents = demo.incidents;
+        state.airQuality = demo.airQuality;
+        state.analysis = demo.analysis;
+        state.normalized = demo.normalized;
+        renderAll();
+        renderDemoControls();
+    }
+
+    function renderAll() {
+        renderWeather();
+        renderTraffic();
+        renderIncidents();
+        renderAirQuality();
+        renderPulse();
+        renderHappening();
+        renderRecent();
+        renderTrend();
+        renderSources();
+        updateMapMarkers();
+        setText("last-updated", fmtTime(new Date()));
     }
 
     // ---------- card renderers (each fails on its own) ----------
@@ -428,6 +653,7 @@
     // ---------- Data sources (LIVE / AVAILABLE / UNAVAILABLE) ----------
 
     function sourceStatus(payload, isArray, maxAgeMinutes) {
+        if (state.demoMode) return { status: "DEMO", note: "Simulated data" };
         if (!payload || payload.error) return { status: "UNAVAILABLE", note: "" };
         var latest = isArray ? (payload.length ? payload[0].recorded_at : null) : payload.recorded_at;
         if (!latest) return { status: "UNAVAILABLE", note: "no records" };
@@ -614,6 +840,11 @@
     // ---------- main load + auto refresh ----------
 
     function loadAll() {
+        if (state.demoMode) {
+            applyDemoData();
+            return;
+        }
+
         Promise.allSettled([
             fetchJson("api/weather.php"),
             fetchJson("api/traffic.php"),
@@ -629,18 +860,7 @@
             state.analysis   = results[4].status === "fulfilled" ? results[4].value : null;
             state.normalized = results[5].status === "fulfilled" ? results[5].value : null;
 
-            renderWeather();
-            renderTraffic();
-            renderIncidents();
-            renderAirQuality();
-            renderPulse();
-            renderHappening();
-            renderRecent();
-            renderTrend();
-            renderSources();
-            updateMapMarkers();
-
-            setText("last-updated", fmtTime(new Date()));
+            renderAll();
         });
     }
 
@@ -651,9 +871,30 @@
         setText("header-date", fmtDate(now));
     }
 
+    document.getElementById("demo-mode-toggle").addEventListener("click", function () {
+        state.demoMode = !state.demoMode;
+        if (state.demoMode) {
+            applyDemoData();
+        } else {
+            loadAll();
+            renderDemoControls();
+        }
+    });
+
+    document.querySelectorAll(".demo-scenario-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            state.demoScenario = btn.getAttribute("data-demo-scenario");
+            if (state.demoMode) {
+                applyDemoData();
+            } else {
+                renderDemoControls();
+            }
+        });
+    });
+
     tickClock();
     setInterval(tickClock, 1000);
-
+    renderDemoControls();
     initMap();
     loadAll();
     setInterval(loadAll, REFRESH_INTERVAL_MS);

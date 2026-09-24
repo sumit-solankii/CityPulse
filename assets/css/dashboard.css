@@ -105,6 +105,68 @@ body.dashboard-page {
     animation: live-pulse 2s ease-in-out infinite;
 }
 
+.demo-chip {
+    border-color: rgba(250, 204, 21, 0.5);
+    background: rgba(250, 204, 21, 0.12);
+    color: var(--yellow);
+}
+
+.demo-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--yellow);
+    display: inline-block;
+}
+
+.demo-toggle {
+    border-color: rgba(250, 204, 21, 0.5);
+    background: var(--bg-panel);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.demo-toggle.is-demo {
+    background: rgba(250, 204, 21, 0.12);
+    color: var(--yellow);
+}
+
+.demo-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.demo-scenario-btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: #101013;
+    color: var(--text);
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+
+.demo-scenario-btn.active {
+    background: rgba(250, 204, 21, 0.14);
+    border-color: rgba(250, 204, 21, 0.6);
+    color: var(--yellow);
+}
+
+.demo-status {
+    background: rgba(250, 204, 21, 0.08);
+    border-color: rgba(250, 204, 21, 0.4);
+    color: var(--yellow);
+}
+
+.hidden {
+    display: none !important;
+}
+
 @keyframes live-pulse {
     0%, 100% { opacity: 1; }
     50%      { opacity: 0.3; }
@@ -222,10 +284,12 @@ body.dashboard-page {
 .st-moderate    { background: rgba(250, 204, 21, 0.14); color: var(--yellow); border-color: rgba(250, 204, 21, 0.5); }
 .st-high        { background: rgba(248, 113, 113, 0.14); color: var(--red); border-color: rgba(248, 113, 113, 0.5); }
 .st-unavailable { background: rgba(148, 163, 184, 0.12); color: var(--muted); border-color: var(--border); }
+.st-demo        { background: rgba(250, 204, 21, 0.12); color: var(--yellow); border-color: rgba(250, 204, 21, 0.4); }
 
 .st-live, .st-increasing  { color: var(--green); }
 .st-available, .st-stable { color: var(--yellow); }
 .st-unavailable, .st-decreasing { color: var(--orange); }
+.st-demo { color: var(--yellow); }
 
 /* ---------- Two-column grid ---------- */
 

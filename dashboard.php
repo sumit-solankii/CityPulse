@@ -45,6 +45,18 @@
             <div class="chip live-chip" title="Dashboard refreshes every 30 seconds">
                 <span class="live-dot" aria-hidden="true"></span> LIVE
             </div>
+            <div id="demo-chip" class="chip demo-chip hidden" aria-live="polite">
+                <span class="demo-dot" aria-hidden="true"></span> DEMO MODE
+            </div>
+            <div id="demo-controls" class="demo-controls hidden" aria-label="Demo mode scenarios">
+                <button type="button" class="demo-scenario-btn active" data-demo-scenario="NORMAL">NORMAL</button>
+                <button type="button" class="demo-scenario-btn" data-demo-scenario="MODERATE">MODERATE</button>
+                <button type="button" class="demo-scenario-btn" data-demo-scenario="HIGH_ACTIVITY">HIGH ACTIVITY</button>
+            </div>
+            <button id="demo-mode-toggle" type="button" class="chip demo-toggle" aria-pressed="false">
+                Demo Mode: OFF
+            </button>
+            <div id="demo-status" class="chip demo-status hidden" aria-live="polite">Selected: NORMAL · Simulated data for demonstration</div>
             <div class="chip updated-chip">Last updated: <strong id="last-updated">--:--:--</strong></div>
         </div>
     </header>
