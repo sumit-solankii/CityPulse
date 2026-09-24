@@ -89,6 +89,34 @@
             </div>
         </section>
 
+        <section class="card timeline-card" aria-live="polite">
+            <div class="timeline-header">
+                <div>
+                    <h2>Historical Timeline</h2>
+                    <p id="timeline-summary" class="timeline-summary">Loading activity&hellip;</p>
+                </div>
+                <span id="timeline-demo-label" class="badge st-demo hidden">DEMO MODE — Simulated events</span>
+            </div>
+            <div class="timeline-filters" role="group" aria-label="Historical timeline range">
+                <button type="button" class="timeline-filter-btn" data-timeline-hours="1">Last 1 hour</button>
+                <button type="button" class="timeline-filter-btn active" data-timeline-hours="6">Last 6 hours</button>
+                <button type="button" class="timeline-filter-btn" data-timeline-hours="24">Last 24 hours</button>
+            </div>
+            <div class="timeline-table" role="table" aria-label="Recent civic activity">
+                <div class="timeline-row timeline-heading" role="row">
+                    <span role="columnheader">Time</span>
+                    <span role="columnheader">Location</span>
+                    <span role="columnheader">Source</span>
+                    <span role="columnheader">Event type</span>
+                    <span role="columnheader">Severity</span>
+                    <span role="columnheader">Value / message</span>
+                </div>
+                <div id="historical-timeline" class="timeline-body">
+                    <p class="empty-note">Loading activity&hellip;</p>
+                </div>
+            </div>
+        </section>
+
         <!-- Four civic status cards -->
         <section class="cards-grid" aria-label="Civic status cards">
             <article class="card status-card" data-card="weather">

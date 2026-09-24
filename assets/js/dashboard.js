@@ -27,6 +27,7 @@
     var REFRESH_INTERVAL_MS = 30000;       // 30 seconds
     var RECENT_ACTIVITY_LIMIT = 10;
     var TREND_HOURS = 8;
+    var timelineHours = 6;
 
     // Leaflet map (Step 8): centered on Jaipur. A tiny visual offset
     // keeps overlapping markers in the same zone clickable.
@@ -332,6 +333,7 @@
         renderPulse();
         renderSummary();
         renderAlerts();
+        renderTimeline();
         renderHappening();
         renderRecent();
         renderTrend();
@@ -600,6 +602,92 @@
             item.appendChild(content);
             item.appendChild(timeBox);
             list.appendChild(item);
+        });
+    }
+
+    function timelineValue(record) {
+        if (record.value === null || record.value === undefined || record.value === "") {
+            return "--";
+        }
+        if (record.source === "weather") return record.value + " °C";
+        if (record.source === "traffic") return record.value + " min delay";
+        if (record.source === "air_quality") return record.value + " µg/m³ PM2.5";
+        return String(record.value);
+    }
+
+    function renderTimeline() {
+        var list = el("historical-timeline");
+        var summary = el("timeline-summary");
+        var demoLabel = el("timeline-demo-label");
+        if (!list || !summary) return;
+
+        if (demoLabel) demoLabel.classList.toggle("hidden", !state.demoMode);
+
+        if (!state.normalized || !state.normalized.success || !Array.isArray(state.normalized.data)) {
+            list.innerHTML = '<p class="empty-note">Historical activity is temporarily unavailable.</p>';
+            summary.textContent = "Timeline unavailable.";
+            return;
+        }
+
+        var cutoff = Date.now() - timelineHours * 60 * 60 * 1000;
+        var records = state.normalized.data.filter(function (record) {
+            var timestamp = parseTs(record.timestamp).getTime();
+            return isFinite(timestamp) && timestamp >= cutoff;
+        }).sort(function (a, b) {
+            return parseTs(b.timestamp).getTime() - parseTs(a.timestamp).getTime();
+        });
+
+        summary.textContent = records.length + " event" + (records.length === 1 ? "" : "s") +
+            " recorded in the last " + timelineHours + " hour" + (timelineHours === 1 ? "" : "s") + ".";
+
+        if (!records.length) {
+            list.innerHTML = '<p class="empty-note">No recent activity found.</p>';
+            return;
+        }
+
+        list.innerHTML = "";
+        records.forEach(function (record) {
+            var row = document.createElement("div");
+            row.className = "timeline-row";
+            row.setAttribute("role", "row");
+
+            var time = document.createElement("span");
+            time.className = "timeline-time";
+            time.textContent = fmtShortTime(record.timestamp);
+            time.setAttribute("data-label", "Time");
+
+            var location = document.createElement("span");
+            location.className = "timeline-location";
+            location.textContent = record.location || "--";
+            location.setAttribute("data-label", "Location");
+
+            var source = document.createElement("span");
+            source.className = "timeline-source";
+            source.textContent = record.source || "--";
+            source.setAttribute("data-label", "Source");
+
+            var eventType = document.createElement("span");
+            eventType.className = "timeline-event-type";
+            eventType.textContent = record.event_type || "--";
+            eventType.setAttribute("data-label", "Event type");
+
+            var severity = document.createElement("span");
+            severity.className = "timeline-severity";
+            severity.appendChild(severityBadge(record.severity));
+            severity.setAttribute("data-label", "Severity");
+
+            var value = document.createElement("span");
+            value.className = "timeline-value";
+            value.textContent = timelineValue(record);
+            value.setAttribute("data-label", "Value / message");
+
+            row.appendChild(time);
+            row.appendChild(location);
+            row.appendChild(source);
+            row.appendChild(eventType);
+            row.appendChild(severity);
+            row.appendChild(value);
+            list.appendChild(row);
         });
     }
 
@@ -1154,6 +1242,16 @@
             } else {
                 renderDemoControls();
             }
+        });
+    });
+
+    document.querySelectorAll(".timeline-filter-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            timelineHours = parseInt(btn.getAttribute("data-timeline-hours"), 10) || 6;
+            document.querySelectorAll(".timeline-filter-btn").forEach(function (filterBtn) {
+                filterBtn.classList.toggle("active", filterBtn === btn);
+            });
+            renderTimeline();
         });
     });
 
