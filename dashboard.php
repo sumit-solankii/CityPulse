@@ -203,6 +203,25 @@
             <p class="muted">Combined event activity across all sources &mdash; last 8 hours (all real data).</p>
         </section>
 
+        <section class="card civic-trends-card" aria-live="polite">
+            <div class="civic-trends-header">
+                <div>
+                    <h2>Civic Data Trends</h2>
+                    <p id="civic-trends-summary" class="civic-trends-summary">Loading trend data&hellip;</p>
+                </div>
+                <span id="civic-trends-demo-label" class="badge st-demo hidden">DEMO MODE — Simulated data</span>
+            </div>
+            <div class="civic-trends-filters" role="group" aria-label="Civic data trend range">
+                <button type="button" class="civic-trend-filter-btn" data-civic-trend-hours="1">Last 1 hour</button>
+                <button type="button" class="civic-trend-filter-btn active" data-civic-trend-hours="6">Last 6 hours</button>
+                <button type="button" class="civic-trend-filter-btn" data-civic-trend-hours="24">Last 24 hours</button>
+            </div>
+            <div id="civic-trends-grid" class="civic-trends-grid">
+                <p class="empty-note">Loading trend data&hellip;</p>
+            </div>
+            <p class="muted civic-trends-note">Trends describe observed data only; they do not indicate causation.</p>
+        </section>
+
         <!-- Data sources -->
         <section class="card sources-card">
             <h2>Data Sources</h2>

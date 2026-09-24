@@ -28,6 +28,7 @@
     var RECENT_ACTIVITY_LIMIT = 10;
     var TREND_HOURS = 8;
     var timelineHours = 6;
+    var civicTrendHours = 6;
 
     // Leaflet map (Step 8): centered on Jaipur. A tiny visual offset
     // keeps overlapping markers in the same zone clickable.
@@ -337,6 +338,7 @@
         renderHappening();
         renderRecent();
         renderTrend();
+        renderCivicTrends();
         renderSources();
         updateMapMarkers();
         setText("last-updated", fmtTime(new Date()));
@@ -1003,6 +1005,182 @@
         });
     }
 
+    function civicTrendBuckets(records) {
+        var bucketCount = civicTrendHours === 1 ? 4 : (civicTrendHours === 6 ? 6 : 8);
+        var bucketSizeMs = civicTrendHours * 60 * 60 * 1000 / bucketCount;
+        var now = Date.now();
+        var buckets = [];
+        var i;
+
+        for (i = 0; i < bucketCount; i++) {
+            buckets.push({
+                start: now - (bucketCount - i) * bucketSizeMs,
+                end: now - (bucketCount - i - 1) * bucketSizeMs,
+                label: "",
+                records: []
+            });
+        }
+
+        buckets.forEach(function (bucket) {
+            bucket.label = new Date(bucket.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        });
+
+        records.forEach(function (record) {
+            var timestamp = parseTs(record.timestamp).getTime();
+            buckets.forEach(function (bucket) {
+                if (timestamp >= bucket.start && timestamp < bucket.end) {
+                    bucket.records.push(record);
+                }
+            });
+        });
+
+        return buckets;
+    }
+
+    function civicMetricValue(metric, bucket) {
+        var matching = bucket.records.filter(function (record) {
+            return metric.source === "incidents"
+                ? record.source === "incident"
+                : record.source === metric.source;
+        });
+
+        if (!matching.length) return 0;
+        if (metric.source === "incidents") return matching.length;
+
+        var total = matching.reduce(function (sum, record) {
+            var value = metric.valueField === "rainfall" ? record.rainfall : record.value;
+            return sum + (typeof value === "number" && isFinite(value) ? value : 0);
+        }, 0);
+        return total / matching.length;
+    }
+
+    function appendCivicMetric(metric, buckets, hasData, latestText) {
+        var card = document.createElement("article");
+        card.className = "civic-trend-metric";
+
+        var title = document.createElement("h3");
+        title.textContent = metric.label;
+        card.appendChild(title);
+
+        var note = document.createElement("p");
+        note.className = "civic-trend-metric-note";
+        note.textContent = metric.note;
+        card.appendChild(note);
+
+        if (!hasData) {
+            var unavailable = document.createElement("p");
+            unavailable.className = "empty-note";
+            unavailable.textContent = "Data unavailable";
+            card.appendChild(unavailable);
+            return card;
+        }
+
+        var maxValue = Math.max.apply(null, buckets.map(function (bucket) {
+            return civicMetricValue(metric, bucket);
+        })) || 1;
+        var bars = document.createElement("div");
+        bars.className = "civic-trend-bars";
+        bars.setAttribute("aria-label", metric.label + " trend");
+
+        buckets.forEach(function (bucket) {
+            var wrap = document.createElement("div");
+            wrap.className = "civic-trend-bar-wrap";
+
+            var bar = document.createElement("div");
+            bar.className = "civic-trend-bar " + metric.className;
+            var value = civicMetricValue(metric, bucket);
+            bar.style.height = (value === 0 ? 3 : Math.max(8, Math.round((value / maxValue) * 80))) + "px";
+            bar.title = metric.format(value) + " at " + bucket.label;
+
+            var label = document.createElement("span");
+            label.className = "civic-trend-bar-label";
+            label.textContent = bucket.label;
+
+            wrap.appendChild(bar);
+            wrap.appendChild(label);
+            bars.appendChild(wrap);
+        });
+
+        card.appendChild(bars);
+        var latest = document.createElement("p");
+        latest.className = "civic-trend-latest";
+        latest.textContent = latestText;
+        card.appendChild(latest);
+        return card;
+    }
+
+    function renderCivicTrends() {
+        var grid = el("civic-trends-grid");
+        var summary = el("civic-trends-summary");
+        var demoLabel = el("civic-trends-demo-label");
+        if (!grid || !summary) return;
+
+        if (demoLabel) demoLabel.classList.toggle("hidden", !state.demoMode);
+
+        if (!state.normalized || !state.normalized.success || !Array.isArray(state.normalized.data)) {
+            grid.innerHTML = '<p class="empty-note">Trend data temporarily unavailable.</p>';
+            summary.textContent = "Trend data temporarily unavailable.";
+            return;
+        }
+
+        var cutoff = Date.now() - civicTrendHours * 60 * 60 * 1000;
+        var records = state.normalized.data.filter(function (record) {
+            var timestamp = parseTs(record.timestamp).getTime();
+            return isFinite(timestamp) && timestamp >= cutoff;
+        });
+        var buckets = civicTrendBuckets(records);
+        var metricDefinitions = [
+            {
+                label: "Traffic activity",
+                note: "Average delay per time bucket",
+                source: "traffic",
+                className: "traffic",
+                format: function (value) { return value.toFixed(1) + " min delay"; }
+            },
+            {
+                label: "Incidents",
+                note: "Reports recorded per time bucket",
+                source: "incidents",
+                className: "incidents",
+                format: function (value) { return value + " report(s)"; }
+            },
+            {
+                label: "Weather / rainfall",
+                note: "Weather observations; rainfall shown when available",
+                source: "weather",
+                className: "weather",
+                valueField: "rainfall",
+                format: function (value) { return value.toFixed(1) + " mm rainfall"; }
+            },
+            {
+                label: "Air quality / PM2.5",
+                note: "Average PM2.5 per time bucket",
+                source: "air_quality",
+                className: "air-quality",
+                format: function (value) { return value.toFixed(1) + " µg/m³"; }
+            }
+        ];
+
+        grid.innerHTML = "";
+        metricDefinitions.forEach(function (metric) {
+            var sourceRecords = records.filter(function (record) {
+                return (metric.source === "incidents" ? record.source === "incident" : record.source === metric.source);
+            });
+            var latestText = "No latest reading available.";
+            if (metric.source === "weather" && state.weather && state.weather.recorded_at && state.weather.rainfall !== undefined) {
+                latestText = "Latest rainfall: " + state.weather.rainfall + " mm";
+            } else if (metric.source === "air_quality" && state.airQuality && state.airQuality.measurements && state.airQuality.measurements.pm25 !== null) {
+                latestText = "Latest PM2.5: " + state.airQuality.measurements.pm25 + " µg/m³";
+            } else if (sourceRecords.length) {
+                latestText = "Latest observation: " + fmtShortTime(sourceRecords[0].timestamp);
+            }
+            grid.appendChild(appendCivicMetric(metric, buckets, sourceRecords.length > 0, latestText));
+        });
+
+        summary.textContent = records.length + " event" + (records.length === 1 ? "" : "s") +
+            " observed in the last " + civicTrendHours + " hour" + (civicTrendHours === 1 ? "" : "s") + ".";
+    }
+
     // ---------- Data source health (reuses the existing feed payloads) ----------
 
     function sourceStatus(payload, kind, maxAgeMinutes) {
@@ -1322,6 +1500,16 @@
                 filterBtn.classList.toggle("active", filterBtn === btn);
             });
             renderTimeline();
+        });
+    });
+
+    document.querySelectorAll(".civic-trend-filter-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            civicTrendHours = parseInt(btn.getAttribute("data-civic-trend-hours"), 10) || 6;
+            document.querySelectorAll(".civic-trend-filter-btn").forEach(function (filterBtn) {
+                filterBtn.classList.toggle("active", filterBtn === btn);
+            });
+            renderCivicTrends();
         });
     });
 

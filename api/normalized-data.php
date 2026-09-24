@@ -63,7 +63,7 @@ $latestTimestamp = null;
 // ------------------------------------------------------------
 // 1) Weather -> value = temperature
 // ------------------------------------------------------------
-$result = mysqli_query($conn, 'SELECT location, latitude, longitude, temperature, severity, recorded_at FROM weather_data ORDER BY recorded_at DESC LIMIT 100');
+$result = mysqli_query($conn, 'SELECT location, latitude, longitude, temperature, rainfall, severity, recorded_at FROM weather_data ORDER BY recorded_at DESC LIMIT 100');
 
 if (!$result) {
     error_log('CityPulse normalized-data weather query failed: ' . mysqli_error($conn));
@@ -81,6 +81,7 @@ while ($row = mysqli_fetch_assoc($result)) {
         'latitude'   => (float) $row['latitude'],
         'longitude'  => (float) $row['longitude'],
         'value'      => (float) $row['temperature'],
+        'rainfall'   => (float) $row['rainfall'],
         'severity'   => normalize_severity($row['severity']),
         'timestamp'  => $row['recorded_at'],
     ];
