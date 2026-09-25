@@ -2034,16 +2034,6 @@
             state.selectedArea = areaFilter.value || "ALL";
             state.insightSignature = null;
             renderAll();
-            if (map) {
-                var areaCenter = {
-                    "Zone A": [26.9124, 75.7873],
-                    "Zone B": [26.8980, 75.7780],
-                    "Zone C": [26.9210, 75.8050]
-                };
-                if (areaCenter[state.selectedArea] && !userLocationMarker) {
-                    map.setView(areaCenter[state.selectedArea], MAP_ZOOM);
-                }
-            }
         });
     }
 
