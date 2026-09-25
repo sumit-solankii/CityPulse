@@ -29,16 +29,11 @@
     var TREND_HOURS = 8;
     var timelineHours = 6;
     var civicTrendHours = 6;
+    var NEARBY_RADIUS_KM = 10;
+    var LOCATION_REFRESH_THRESHOLD_KM = 0.5;
 
-    // Leaflet map (Step 8): centered on Jaipur. A tiny visual offset
-    // keeps overlapping markers in the same zone clickable.
+    // Leaflet map (Step 8): the browser location is the live center.
     var MAP_ZOOM = 12;
-    var MARKER_OFFSET = {
-        weather:  { lat: 0,      lng: 0 },
-        traffic:  { lat: 0,      lng: 0.0008 },
-        incident: { lat: 0,      lng: -0.0008 },
-        air_quality: { lat: 0.0016, lng: 0.0016 }
-    };
     var map = null;
     var mapGroups = null;
     var mapFilter = "all";
@@ -64,6 +59,7 @@
         airQuality: null,
         analysis: null,
         normalized: null,
+        currentLocation: null,
         fetchErrors: {},
         insightSignature: null,
         insightRequest: null
@@ -127,12 +123,30 @@
                 if (fetchedAt && payload && typeof payload === "object") {
                     payload.__fetched_at = fetchedAt;
                 }
-                if (payload && (payload.error || payload.success === false)) {
+                if (payload && payload.error) {
                     throw new Error(payload.message || payload.error || "Data source request failed");
                 }
                 return payload;
             });
         });
+    }
+
+    function apiUrl(path) {
+        if (!state.currentLocation) return path;
+        return path + "?latitude=" + encodeURIComponent(state.currentLocation.latitude)
+            + "&longitude=" + encodeURIComponent(state.currentLocation.longitude)
+            + "&radius_km=" + encodeURIComponent(NEARBY_RADIUS_KM);
+    }
+
+    function distanceKm(locationA, locationB) {
+        var earthKm = 6371;
+        var dLat = (locationB.latitude - locationA.latitude) * Math.PI / 180;
+        var dLng = (locationB.longitude - locationA.longitude) * Math.PI / 180;
+        var a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+            + Math.cos(locationA.latitude * Math.PI / 180)
+            * Math.cos(locationB.latitude * Math.PI / 180)
+            * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     function setText(id, text) {
@@ -178,6 +192,12 @@
 
     function buildDemoScenario(scenarioName) {
         var now = new Date();
+        var demoLat = state.currentLocation ? state.currentLocation.latitude : null;
+        var demoLng = state.currentLocation ? state.currentLocation.longitude : null;
+        var demoZoneBLat = demoLat === null ? null : demoLat + 0.01;
+        var demoZoneBLng = demoLng === null ? null : demoLng - 0.01;
+        var demoZoneCLat = demoLat === null ? null : demoLat - 0.01;
+        var demoZoneCLng = demoLng === null ? null : demoLng + 0.01;
         var base = { recorded_at: formatDemoTimestamp(now) };
         var weather = {};
         var traffic = [];
@@ -190,8 +210,8 @@
         if (scenarioName === DEMO_SCENARIOS.MODERATE) {
             weather = {
                 location: "Jaipur",
-                latitude: 26.9124,
-                longitude: 75.7873,
+                latitude: demoLat,
+                longitude: demoLng,
                 temperature: 34.2,
                 relative_humidity: 58,
                 rainfall: 12.8,
@@ -201,14 +221,14 @@
                 recorded_at: base.recorded_at
             };
             traffic = [
-                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, delay_minutes: 22, traffic_level: "Moderate", severity: "MODERATE", recorded_at: base.recorded_at },
-                { id: 2, location: "Zone B", latitude: 26.8980, longitude: 75.7780, delay_minutes: 12, traffic_level: "Moderate", severity: "MODERATE", recorded_at: base.recorded_at },
-                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, delay_minutes: 28, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at }
+                { id: 1, location: "Zone A", latitude: demoLat, longitude: demoLng, delay_minutes: 22, traffic_level: "Moderate", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone B", latitude: demoZoneBLat, longitude: demoZoneBLng, delay_minutes: 12, traffic_level: "Moderate", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: demoZoneCLat, longitude: demoZoneCLng, delay_minutes: 28, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at }
             ];
             incidents = [
-                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Road Closure", description: "Road work and partial lane closures near the market route.", severity: "MODERATE", recorded_at: base.recorded_at },
-                { id: 2, location: "Zone C", latitude: 26.9210, longitude: 75.8050, incident_type: "Drain Overflow", description: "Blocked drain causing standing water on the main road.", severity: "MODERATE", recorded_at: base.recorded_at },
-                { id: 3, location: "Zone B", latitude: 26.8980, longitude: 75.7780, incident_type: "Street Light Outage", description: "Several street lights are malfunctioning near the residential stretch.", severity: "LOW", recorded_at: base.recorded_at }
+                { id: 1, location: "Zone A", latitude: demoLat, longitude: demoLng, incident_type: "Road Closure", description: "Road work and partial lane closures near the market route.", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone C", latitude: demoZoneCLat, longitude: demoZoneCLng, incident_type: "Drain Overflow", description: "Blocked drain causing standing water on the main road.", severity: "MODERATE", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone B", latitude: demoZoneBLat, longitude: demoZoneBLng, incident_type: "Street Light Outage", description: "Several street lights are malfunctioning near the residential stretch.", severity: "LOW", recorded_at: base.recorded_at }
             ];
             pulse = "MODERATE";
             anomalies = [
@@ -218,8 +238,8 @@
         } else if (scenarioName === DEMO_SCENARIOS.HIGH_ACTIVITY) {
             weather = {
                 location: "Jaipur",
-                latitude: 26.9124,
-                longitude: 75.7873,
+                latitude: demoLat,
+                longitude: demoLng,
                 temperature: 38.6,
                 relative_humidity: 72,
                 rainfall: 33.4,
@@ -229,15 +249,15 @@
                 recorded_at: base.recorded_at
             };
             traffic = [
-                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, delay_minutes: 42, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at },
-                { id: 2, location: "Zone B", latitude: 26.8980, longitude: 75.7780, delay_minutes: 26, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at },
-                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, delay_minutes: 48, traffic_level: "Gridlock", severity: "HIGH", recorded_at: base.recorded_at }
+                { id: 1, location: "Zone A", latitude: demoLat, longitude: demoLng, delay_minutes: 42, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone B", latitude: demoZoneBLat, longitude: demoZoneBLng, delay_minutes: 26, traffic_level: "Heavy", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: demoZoneCLat, longitude: demoZoneCLng, delay_minutes: 48, traffic_level: "Gridlock", severity: "HIGH", recorded_at: base.recorded_at }
             ];
             incidents = [
-                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Power Outage", description: "Multiple blocks are facing a major power disruption after recent storms.", severity: "HIGH", recorded_at: base.recorded_at },
-                { id: 2, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Water Pipeline Burst", description: "A ruptured water line is flooding the market road and nearby walkways.", severity: "HIGH", recorded_at: base.recorded_at },
-                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, incident_type: "Road Closure", description: "A key corridor is closed following a vehicle pile-up and debris removal work.", severity: "HIGH", recorded_at: base.recorded_at },
-                { id: 4, location: "Zone B", latitude: 26.8980, longitude: 75.7780, incident_type: "Drain Overflow", description: "Continuous rain is causing water to collect and block residential streets.", severity: "MODERATE", recorded_at: base.recorded_at }
+                { id: 1, location: "Zone A", latitude: demoLat, longitude: demoLng, incident_type: "Power Outage", description: "Multiple blocks are facing a major power disruption after recent storms.", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone A", latitude: demoLat, longitude: demoLng, incident_type: "Water Pipeline Burst", description: "A ruptured water line is flooding the market road and nearby walkways.", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: demoZoneCLat, longitude: demoZoneCLng, incident_type: "Road Closure", description: "A key corridor is closed following a vehicle pile-up and debris removal work.", severity: "HIGH", recorded_at: base.recorded_at },
+                { id: 4, location: "Zone B", latitude: demoZoneBLat, longitude: demoZoneBLng, incident_type: "Drain Overflow", description: "Continuous rain is causing water to collect and block residential streets.", severity: "MODERATE", recorded_at: base.recorded_at }
             ];
             pulse = "HIGH";
             anomalies = [
@@ -252,8 +272,8 @@
         } else {
             weather = {
                 location: "Jaipur",
-                latitude: 26.9124,
-                longitude: 75.7873,
+                latitude: demoLat,
+                longitude: demoLng,
                 temperature: 30.8,
                 relative_humidity: 44,
                 rainfall: 1.5,
@@ -263,13 +283,13 @@
                 recorded_at: base.recorded_at
             };
             traffic = [
-                { id: 1, location: "Zone A", latitude: 26.9124, longitude: 75.7873, delay_minutes: 8, traffic_level: "Light", severity: "NORMAL", recorded_at: base.recorded_at },
-                { id: 2, location: "Zone B", latitude: 26.8980, longitude: 75.7780, delay_minutes: 6, traffic_level: "Light", severity: "NORMAL", recorded_at: base.recorded_at },
-                { id: 3, location: "Zone C", latitude: 26.9210, longitude: 75.8050, delay_minutes: 10, traffic_level: "Moderate", severity: "NORMAL", recorded_at: base.recorded_at }
+                { id: 1, location: "Zone A", latitude: demoLat, longitude: demoLng, delay_minutes: 8, traffic_level: "Light", severity: "NORMAL", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone B", latitude: demoZoneBLat, longitude: demoZoneBLng, delay_minutes: 6, traffic_level: "Light", severity: "NORMAL", recorded_at: base.recorded_at },
+                { id: 3, location: "Zone C", latitude: demoZoneCLat, longitude: demoZoneCLng, delay_minutes: 10, traffic_level: "Moderate", severity: "NORMAL", recorded_at: base.recorded_at }
             ];
             incidents = [
-                { id: 1, location: "Zone B", latitude: 26.8980, longitude: 75.7780, incident_type: "Street Light Outage", description: "One lamp post near the residential lane is currently offline.", severity: "LOW", recorded_at: base.recorded_at },
-                { id: 2, location: "Zone A", latitude: 26.9124, longitude: 75.7873, incident_type: "Garbage Complaint", description: "Minor waste accumulation reported near the market side street.", severity: "LOW", recorded_at: base.recorded_at }
+                { id: 1, location: "Zone B", latitude: demoZoneBLat, longitude: demoZoneBLng, incident_type: "Street Light Outage", description: "One lamp post near the residential lane is currently offline.", severity: "LOW", recorded_at: base.recorded_at },
+                { id: 2, location: "Zone A", latitude: demoLat, longitude: demoLng, incident_type: "Garbage Complaint", description: "Minor waste accumulation reported near the market side street.", severity: "LOW", recorded_at: base.recorded_at }
             ];
             pulse = "NORMAL";
             anomalies = [];
@@ -280,8 +300,8 @@
             success: true,
             source: "OpenAQ",
             location: "Jaipur",
-            latitude: 26.9124,
-            longitude: 75.7873,
+            latitude: demoLat,
+            longitude: demoLng,
             measurements: scenarioName === DEMO_SCENARIOS.MODERATE ? { pm25: 41.8, pm10: 96.2, no2: 52.5, o3: 84.7 } : (scenarioName === DEMO_SCENARIOS.HIGH_ACTIVITY ? { pm25: 72.9, pm10: 201.0, no2: 118.8, o3: 156.1 } : { pm25: 22.4, pm10: 51.8, no2: 28.5, o3: 48.9 }),
             severity: scenarioName === DEMO_SCENARIOS.MODERATE ? "MODERATE" : (scenarioName === DEMO_SCENARIOS.HIGH_ACTIVITY ? "HIGH" : "NORMAL"),
             recorded_at: base.recorded_at
@@ -400,7 +420,9 @@
 
     function renderAll() {
         state.view = buildAreaView();
-        setText("selected-area-label", state.selectedArea === "ALL" ? "All Areas" : state.selectedArea);
+        setText("selected-area-label", state.selectedArea === "ALL"
+            ? (state.currentLocation ? "Current area" : "All Areas")
+            : state.selectedArea);
         renderWeather();
         renderTraffic();
         renderIncidents();
@@ -926,11 +948,19 @@
     function renderTraffic() {
         var t = activeView().traffic;
         var badgeEl = el("traffic-badge");
-        if (!t || t.error || !t.length) {
+        if (!t || t.error) {
             badgeEl.innerHTML = "";
             badgeEl.appendChild(badge("Unavailable", "st-unavailable"));
             setText("traffic-value", "Traffic data unavailable");
             setText("traffic-desc", "Could not load traffic readings.");
+            setText("traffic-updated", "--");
+            return;
+        }
+        if (!t.length) {
+            badgeEl.innerHTML = "";
+            badgeEl.appendChild(badge("NORMAL", "st-normal"));
+            setText("traffic-value", "0 nearby readings");
+            setText("traffic-desc", "No nearby traffic data found.");
             setText("traffic-updated", "--");
             return;
         }
@@ -949,11 +979,19 @@
     function renderIncidents() {
         var inc = activeView().incidents;
         var badgeEl = el("incidents-badge");
-        if (!inc || inc.error || !inc.length) {
+        if (!inc || inc.error) {
             badgeEl.innerHTML = "";
             badgeEl.appendChild(badge("Unavailable", "st-unavailable"));
             setText("incidents-value", "Incident data unavailable");
             setText("incidents-desc", "Could not load incident reports.");
+            setText("incidents-updated", "--");
+            return;
+        }
+        if (!inc.length) {
+            badgeEl.innerHTML = "";
+            badgeEl.appendChild(badge("NORMAL", "st-normal"));
+            setText("incidents-value", "0 nearby reports");
+            setText("incidents-desc", "No nearby incidents found.");
             setText("incidents-updated", "--");
             return;
         }
@@ -977,7 +1015,7 @@
             badgeEl.innerHTML = "";
             badgeEl.appendChild(badge("Unavailable", "st-unavailable"));
             setText("air-quality-value", "Air quality data unavailable");
-            setText("air-quality-desc", "Air quality data unavailable");
+            setText("air-quality-desc", aq && aq.message ? aq.message : "Air quality data unavailable");
             setText("air-quality-updated", "--");
             return;
         }
@@ -1519,7 +1557,11 @@
             return { status: "OFFLINE", message: "Data source status temporarily unavailable.", latest: null };
         }
         if (payload.error || (kind === "air_quality" && payload.success === false)) {
-            return { status: "OFFLINE", message: "Request failed or data is unavailable.", latest: null };
+            return {
+                status: "OFFLINE",
+                message: payload.message || payload.error || "Request failed or data is unavailable.",
+                latest: null
+            };
         }
 
         var latest = null;
@@ -1658,6 +1700,15 @@
 
         var latLng = [coords.latitude, coords.longitude];
         var accuracy = isFinite(coords.accuracy) ? Math.max(0, coords.accuracy) : 0;
+        var nextLocation = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy: accuracy
+        };
+        var locationMoved = !state.currentLocation
+            || distanceKm(state.currentLocation, nextLocation) >= LOCATION_REFRESH_THRESHOLD_KM;
+        state.currentLocation = nextLocation;
+        if (state.selectedArea === "ALL") setText("selected-area-label", "Current area");
         var userIcon = L.divIcon({
             className: "cp-user-location-icon",
             html: '<span aria-hidden="true"></span>',
@@ -1688,6 +1739,7 @@
         }
 
         locationStatus("Location updated" + (accuracy ? " (accuracy " + Math.round(accuracy) + " m)" : "."));
+        if (locationMoved && !state.demoMode) loadAll();
         if (centerOnNextLocation) {
             map.setView(latLng, Math.max(map.getZoom(), 15));
             centerOnNextLocation = false;
@@ -1784,8 +1836,6 @@
 
         var source = record.source === "incident" ? "incident" : record.source;
         var category = issueCategory(record);
-        var off = MARKER_OFFSET[source] || { lat: 0, lng: 0 };
-
         var icon = L.divIcon({
             className: "cp-marker",
             html: '<span class="cp-dot category-' + category + '" aria-label="' + esc(categoryLabel(category)) + '">' + category.charAt(0).toUpperCase() + '</span>',
@@ -1793,7 +1843,7 @@
             iconAnchor: [12, 12]
         });
 
-        var marker = L.marker([lat + off.lat, lng + off.lng], { icon: icon });
+        var marker = L.marker([lat, lng], { icon: icon });
         marker._cpSource = source;
         marker._cpCategory = category;
         marker.bindPopup(popupHtml(record));
@@ -1903,7 +1953,25 @@
         var heatPoints = [];
         var markerCount = 0;
 
-        n.data.forEach(function (record) {
+        var mapRecords = n.data.slice();
+        var airQuality = activeView().airQuality;
+        if (airQuality && Array.isArray(airQuality.stations)) {
+            airQuality.stations.forEach(function (station) {
+                var stationPm25 = station.measurements && station.measurements.pm25;
+                mapRecords.push({
+                    source: "air_quality",
+                    event_type: "air_quality",
+                    location: station.name,
+                    latitude: station.latitude,
+                    longitude: station.longitude,
+                    value: typeof stationPm25 === "number" ? stationPm25 : null,
+                    severity: station.severity || "NORMAL",
+                    timestamp: airQuality.recorded_at
+                });
+            });
+        }
+
+        mapRecords.forEach(function (record) {
             if (!areaMatches(record.location)) return;
             var source = record.source === "incident" ? "incident" : record.source;
             var category = issueCategory(record);
@@ -1948,13 +2016,18 @@
             return;
         }
 
+        if (!state.currentLocation) {
+            locationStatus("Location permission is required to load nearby data.", true);
+            return;
+        }
+
         Promise.allSettled([
-            fetchJson("api/weather.php"),
-            fetchJson("api/traffic.php"),
-            fetchJson("api/incidents.php"),
-            fetchJson("api/air-quality.php"),
-            fetchJson("api/analyze.php"),
-            fetchJson("api/normalized-data.php")
+            fetchJson(apiUrl("api/weather.php")),
+            fetchJson(apiUrl("api/traffic.php")),
+            fetchJson(apiUrl("api/incidents.php")),
+            fetchJson(apiUrl("api/air-quality.php")),
+            fetchJson(apiUrl("api/analyze.php")),
+            fetchJson(apiUrl("api/normalized-data.php"))
         ]).then(function (results) {
             var feeds = [
                 ["weather", "weather"],
@@ -1966,13 +2039,16 @@
             ];
             feeds.forEach(function (feed, index) {
                 var result = results[index];
-                if (result.status === "fulfilled") {
+                if (result.status === "fulfilled" && !(result.value && result.value.success === false && state[feed[0]])) {
                     state[feed[0]] = result.value;
                     state.fetchErrors[feed[1]] = null;
                 } else {
                     state.fetchErrors[feed[1]] = result.reason && result.reason.message
                         ? result.reason.message
-                        : "Request failed";
+                        : (result.value && result.value.message ? result.value.message : "Request failed");
+                    if (result.status === "fulfilled" && !state[feed[0]]) {
+                        state[feed[0]] = result.value;
+                    }
                 }
             });
 

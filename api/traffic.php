@@ -9,9 +9,13 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/location.php';
+
+$nearby = citypulse_request_location();
+$distanceWhere = citypulse_distance_sql($nearby['latitude'], $nearby['longitude'], $nearby['radius_km'], 't');
 
 // Fetch traffic readings from MySQL.
-$result = mysqli_query($conn, 'SELECT id, location, latitude, longitude, delay_minutes, traffic_level, severity, recorded_at FROM traffic_data ORDER BY recorded_at DESC');
+$result = mysqli_query($conn, 'SELECT t.id, t.location, t.latitude, t.longitude, t.delay_minutes, t.traffic_level, t.severity, t.recorded_at FROM traffic_data AS t WHERE ' . $distanceWhere . ' ORDER BY t.recorded_at DESC');
 
 // Handle query errors without exposing credentials to the user.
 if (!$result) {

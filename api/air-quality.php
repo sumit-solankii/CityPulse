@@ -2,7 +2,7 @@
 /**
  * CityPulse - Air Quality API (Step 9)
  *
- * Fetches the latest air-quality measurements near Jaipur, Rajasthan
+ * Fetches the latest air-quality measurements near the browser location
  * from the OpenAQ API v3 and returns a clean CityPulse structure.
  *
  * URL: /CityPulse/api/air-quality.php
@@ -37,19 +37,17 @@ ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../config/api_config.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/location.php';
 
 // ------------------------------------------------------------
 // Tunable settings - edit these values here.
 // ------------------------------------------------------------
 
-// Monitored area (Jaipur, Rajasthan is the initial target area).
-define('AIR_QUALITY_LOCATION', 'Jaipur');
-define('AIR_QUALITY_LATITUDE', 26.9124);
-define('AIR_QUALITY_LONGITUDE', 75.7873);
-
-// Search radius in meters around Jaipur for monitoring stations
-// (OpenAQ maximum is 25000).
-define('AIR_QUALITY_RADIUS_METERS', 25000);
+$nearby = citypulse_request_location();
+$airQualityLatitude = $nearby['latitude'];
+$airQualityLongitude = $nearby['longitude'];
+$airQualityLocation = 'Current area';
+$airQualityRadiusMeters = $nearby['radius_km'] * 1000;
 
 // How long a stored reading stays "fresh" (seconds). 900 = 15 min.
 // While a reading is fresh the endpoint returns it from MySQL and
@@ -258,10 +256,45 @@ function air_quality_results($response)
     return $data['results'];
 }
 
+function air_quality_extract_measurements($station, $latestResults)
+{
+    $sensorParams = [];
+    if (isset($station['sensors']) && is_array($station['sensors'])) {
+        foreach ($station['sensors'] as $sensor) {
+            $sensorId = isset($sensor['id']) ? (int) $sensor['id'] : null;
+            $pname = isset($sensor['parameter']['name']) ? $sensor['parameter']['name'] : null;
+            $punit = isset($sensor['parameter']['units']) ? $sensor['parameter']['units'] : null;
+            if ($sensorId !== null && $pname !== null) {
+                $sensorParams[$sensorId] = ['name' => $pname, 'units' => $punit];
+            }
+        }
+    }
+
+    $bySensor = [];
+    foreach ($latestResults as $item) {
+        $sensorId = isset($item['sensorsId']) ? (int) $item['sensorsId'] : null;
+        if ($sensorId === null || !isset($item['value']) || !is_numeric($item['value']) || isset($bySensor[$sensorId])) {
+            continue;
+        }
+        $bySensor[$sensorId] = (float) $item['value'];
+    }
+
+    $measurements = ['pm25' => null, 'pm10' => null, 'no2' => null, 'o3' => null];
+    foreach ($bySensor as $sensorId => $value) {
+        if (!isset($sensorParams[$sensorId])) continue;
+        $parameter = $sensorParams[$sensorId];
+        if (!array_key_exists($parameter['name'], $measurements)) continue;
+        if (stripos((string) $parameter['units'], 'µg/m') === false) continue;
+        $measurements[$parameter['name']] = $value;
+    }
+    return $measurements;
+}
+
 // ------------------------------------------------------------
 // 1) Fresh stored reading? Return it without calling OpenAQ.
 // ------------------------------------------------------------
-$freshQuery = mysqli_query($conn, 'SELECT location, latitude, longitude, pm25, pm10, no2, o3, severity, recorded_at FROM air_quality_data ORDER BY recorded_at DESC LIMIT 1');
+$airWhere = citypulse_distance_sql($airQualityLatitude, $airQualityLongitude, $nearby['radius_km'], 'a');
+$freshQuery = mysqli_query($conn, 'SELECT a.location, a.latitude, a.longitude, a.pm25, a.pm10, a.no2, a.o3, a.severity, a.recorded_at FROM air_quality_data AS a WHERE ' . $airWhere . ' ORDER BY a.recorded_at DESC LIMIT 5');
 
 if (!$freshQuery) {
     // The air_quality_data table does not exist yet (schema not imported)
@@ -270,15 +303,33 @@ if (!$freshQuery) {
     air_quality_fail();
 }
 
-$freshRow = mysqli_fetch_assoc($freshQuery);
+$freshRows = [];
+while ($row = mysqli_fetch_assoc($freshQuery)) $freshRows[] = $row;
+$freshRow = $freshRows[0] ?? null;
 
 if ($freshRow !== null && (time() - strtotime($freshRow['recorded_at'])) < AIR_QUALITY_MIN_INTERVAL_SECONDS) {
+    $cachedStations = [];
+    foreach ($freshRows as $row) {
+        $cachedStations[] = [
+            'id' => null,
+            'name' => $row['location'],
+            'latitude' => (float) $row['latitude'],
+            'longitude' => (float) $row['longitude'],
+            'measurements' => [
+                'pm25' => $row['pm25'] !== null ? (float) $row['pm25'] : null,
+                'pm10' => $row['pm10'] !== null ? (float) $row['pm10'] : null,
+                'no2'  => $row['no2']  !== null ? (float) $row['no2']  : null,
+                'o3'   => $row['o3']   !== null ? (float) $row['o3']   : null,
+            ],
+            'severity' => $row['severity'],
+        ];
+    }
     header('X-CityPulse-Fetched-At: ' . gmdate('c'));
     header('Content-Type: application/json');
     echo json_encode([
         'success'      => true,
         'source'       => 'OpenAQ',
-        'location'     => AIR_QUALITY_LOCATION,
+        'location'     => $airQualityLocation,
         'latitude'     => (float) $freshRow['latitude'],
         'longitude'    => (float) $freshRow['longitude'],
         'measurements' => [
@@ -289,19 +340,20 @@ if ($freshRow !== null && (time() - strtotime($freshRow['recorded_at'])) < AIR_Q
         ],
         'severity'   => $freshRow['severity'],
         'recorded_at' => $freshRow['recorded_at'],
+        'stations' => $cachedStations,
         'stored'     => false, // served from the existing fresh row
     ], JSON_PRETTY_PRINT);
     exit;
 }
 
 // ------------------------------------------------------------
-// 2) No fresh row - ask OpenAQ for data near Jaipur.
+// 2) No fresh row - ask OpenAQ for data near the browser location.
 // ------------------------------------------------------------
 
-// 2a) Find monitoring stations near Jaipur that measure our pollutants.
+// 2a) Find monitoring stations near the browser location.
 $locationsUrl = 'https://api.openaq.org/v3/locations'
-    . '?coordinates=' . AIR_QUALITY_LATITUDE . ',' . AIR_QUALITY_LONGITUDE
-    . '&radius=' . AIR_QUALITY_RADIUS_METERS
+    . '?coordinates=' . $airQualityLatitude . ',' . $airQualityLongitude
+    . '&radius=' . $airQualityRadiusMeters
     . '&parameters_id=' . OPENAQ_PARAMETER_IDS
     . '&limit=25';
 
@@ -327,14 +379,14 @@ if ($locationsCall['status'] < 200 || $locationsCall['status'] >= 300) {
 
 $locations = air_quality_results($locationsCall['body']);
 if ($locations === null || count($locations) === 0) {
-    error_log('CityPulse air-quality: no monitoring stations found near Jaipur.');
+    error_log('CityPulse air-quality: no monitoring stations found near the browser location.');
     air_quality_fail(
-        'OpenAQ returned no monitoring stations near Jaipur.',
+        'No nearby AQI station found.',
         air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body'])
     );
 }
 
-// 2b) Pick the station nearest to Jaipur (the API only sorts by id,
+// 2b) Pick the station nearest to the browser location (the API only sorts by id,
 //     so we compare distances ourselves).
 $nearest = null;
 $nearestKm = PHP_FLOAT_MAX;
@@ -345,7 +397,7 @@ foreach ($locations as $loc) {
     }
     $lat = (float) $loc['coordinates']['latitude'];
     $lng = (float) $loc['coordinates']['longitude'];
-    $km = haversine_km(AIR_QUALITY_LATITUDE, AIR_QUALITY_LONGITUDE, $lat, $lng);
+    $km = haversine_km($airQualityLatitude, $airQualityLongitude, $lat, $lng);
     if ($km < $nearestKm) {
         $nearestKm = $km;
         $nearest = $loc;
@@ -355,7 +407,7 @@ foreach ($locations as $loc) {
 if ($nearest === null) {
     error_log('CityPulse air-quality: stations found, but none with usable coordinates.');
     air_quality_fail(
-        'OpenAQ returned no monitoring stations with usable coordinates near Jaipur.',
+        'No nearby AQI station with usable coordinates found.',
         air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body'])
     );
 }
@@ -364,20 +416,6 @@ $stationId   = (int) $nearest['id'];
 $stationName = isset($nearest['name']) ? (string) $nearest['name'] : ('Station ' . $stationId);
 $stationLat  = (float) $nearest['coordinates']['latitude'];
 $stationLng  = (float) $nearest['coordinates']['longitude'];
-
-// Which pollutant does each sensor at this station measure?
-// sensorsId -> ['name' => parameter name, 'units' => unit string]
-$sensorParams = [];
-if (isset($nearest['sensors']) && is_array($nearest['sensors'])) {
-    foreach ($nearest['sensors'] as $sensor) {
-        $sensorId = isset($sensor['id']) ? (int) $sensor['id'] : null;
-        $pname    = isset($sensor['parameter']['name']) ? $sensor['parameter']['name'] : null;
-        $punit    = isset($sensor['parameter']['units']) ? $sensor['parameter']['units'] : null;
-        if ($sensorId !== null && $pname !== null) {
-            $sensorParams[$sensorId] = ['name' => $pname, 'units' => $punit];
-        }
-    }
-}
 
 // 2c) Read the latest readings at that station.
 $latestUrl = 'https://api.openaq.org/v3/locations/' . $stationId . '/latest?limit=100';
@@ -405,38 +443,7 @@ if ($latestResults === null || count($latestResults) === 0) {
     );
 }
 
-// sensorId -> latest value (keep the first occurrence for each sensor).
-$bySensor = [];
-foreach ($latestResults as $item) {
-    $sensorId = isset($item['sensorsId']) ? (int) $item['sensorsId'] : null;
-    if ($sensorId === null || !isset($item['value']) || !is_numeric($item['value'])) {
-        continue;
-    }
-    if (isset($bySensor[$sensorId])) {
-        continue;
-    }
-    $bySensor[$sensorId] = (float) $item['value'];
-}
-
-// 2d) Collect our four pollutants. Only mass-concentration values
-//     (µg/m³) are used so the thresholds above stay meaningful -
-//     ppm readings for NO2/O3 from some providers are skipped
-//     (that pollutant simply shows as null, not an error).
-$measurements = ['pm25' => null, 'pm10' => null, 'no2' => null, 'o3' => null];
-foreach ($bySensor as $sensorId => $value) {
-    if (!isset($sensorParams[$sensorId])) {
-        continue;
-    }
-    $pname = $sensorParams[$sensorId]['name'];
-    $punit = $sensorParams[$sensorId]['units'];
-    if (!array_key_exists($pname, $measurements)) {
-        continue; // not one of our pollutants
-    }
-    if (stripos((string) $punit, 'µg/m') === false) {
-        continue; // not a µg/m³ value
-    }
-    $measurements[$pname] = $value;
-}
+$measurements = air_quality_extract_measurements($nearest, $latestResults);
 
 // If the station reported nothing usable, treat it as an outage
 // (we still return healthy partial data when at least one is present).
@@ -450,9 +457,62 @@ foreach ($measurements as $value) {
 if (!$hasAny) {
     error_log('CityPulse air-quality: station ' . $stationId . ' had no usable µg/m³ values.');
     air_quality_fail(
-        'OpenAQ returned no usable measurements for Jaipur.',
+        'OpenAQ returned no usable measurements near the current location.',
         air_quality_debug($latestUrl, $latestCall['status'], $latestCall['curl_error'], $latestCall['body'])
     );
+}
+
+$nearbyStations = [[
+    'id' => $stationId,
+    'name' => $stationName,
+    'latitude' => $stationLat,
+    'longitude' => $stationLng,
+    'measurements' => $measurements,
+    'severity' => air_quality_severity($measurements),
+]];
+
+// Read a small set of additional real stations so the dashboard can show
+// separate nearby observations without inventing values or coordinates.
+foreach ($locations as $candidate) {
+    if (count($nearbyStations) >= 5 || !isset($candidate['id'], $candidate['coordinates']['latitude'], $candidate['coordinates']['longitude'])) {
+        break;
+    }
+    $candidateId = (int) $candidate['id'];
+    if ($candidateId === $stationId) continue;
+
+    $candidateUrl = 'https://api.openaq.org/v3/locations/' . $candidateId . '/latest?limit=100';
+    $candidateCall = air_quality_fetch($candidateUrl);
+    if ($candidateCall['status'] < 200 || $candidateCall['status'] >= 300) continue;
+    $candidateResults = air_quality_results($candidateCall['body']);
+    if ($candidateResults === null || count($candidateResults) === 0) continue;
+    $candidateMeasurements = air_quality_extract_measurements($candidate, $candidateResults);
+    $candidateHasAny = false;
+    foreach ($candidateMeasurements as $value) {
+        if ($value !== null) {
+            $candidateHasAny = true;
+            break;
+        }
+    }
+    if (!$candidateHasAny) continue;
+
+    $nearbyStations[] = [
+        'id' => $candidateId,
+        'name' => isset($candidate['name']) ? (string) $candidate['name'] : ('Station ' . $candidateId),
+        'latitude' => (float) $candidate['coordinates']['latitude'],
+        'longitude' => (float) $candidate['coordinates']['longitude'],
+        'measurements' => $candidateMeasurements,
+        'severity' => air_quality_severity($candidateMeasurements),
+    ];
+}
+
+$summaryMeasurements = $measurements;
+foreach (['pm25', 'pm10', 'no2', 'o3'] as $pollutant) {
+    $values = [];
+    foreach ($nearbyStations as $nearbyStation) {
+        $value = $nearbyStation['measurements'][$pollutant];
+        if ($value !== null) $values[] = $value;
+    }
+    if (count($values) > 1) $summaryMeasurements[$pollutant] = array_sum($values) / count($values);
 }
 
 $severity   = air_quality_severity($measurements);
@@ -463,30 +523,31 @@ $recordedAt = date('Y-m-d H:i:s');
 // ------------------------------------------------------------
 $stored = false;
 
-$pm25 = $measurements['pm25'];
-$pm10 = $measurements['pm10'];
-$no2  = $measurements['no2'];
-$o3   = $measurements['o3'];
-
 // (The fresh-row check above already ran, so an insert is normally
 //  expected here - but guard against any race with a quick re-check.)
-$checkRow = mysqli_query($conn, 'SELECT MAX(recorded_at) AS latest FROM air_quality_data');
+$checkRow = mysqli_query($conn, 'SELECT MAX(a.recorded_at) AS latest FROM air_quality_data AS a WHERE ' . $airWhere);
 if ($checkRow) {
     $latestWhen = mysqli_fetch_assoc($checkRow)['latest'];
     if ($latestWhen === null || (time() - strtotime($latestWhen)) >= AIR_QUALITY_MIN_INTERVAL_SECONDS) {
         $stmt = mysqli_prepare($conn, 'INSERT INTO air_quality_data (location, latitude, longitude, pm25, pm10, no2, o3, severity, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
 
-        // mysqli_stmt_bind_param needs plain variables (it binds by
-        // reference); null values are stored as NULL in MySQL.
-        $loc = AIR_QUALITY_LOCATION;
+        foreach ($nearbyStations as $nearbyStation) {
+            $stationMeasurements = $nearbyStation['measurements'];
+            $loc = $nearbyStation['name'];
+            $stationLatValue = $nearbyStation['latitude'];
+            $stationLngValue = $nearbyStation['longitude'];
+            $stationPm25 = $stationMeasurements['pm25'];
+            $stationPm10 = $stationMeasurements['pm10'];
+            $stationNo2 = $stationMeasurements['no2'];
+            $stationO3 = $stationMeasurements['o3'];
+            $stationSeverity = $nearbyStation['severity'];
 
-        mysqli_stmt_bind_param($stmt, 'sddddddss', $loc, $stationLat, $stationLng, $pm25, $pm10, $no2, $o3, $severity, $recordedAt);
-
-        if (mysqli_stmt_execute($stmt)) {
-            $stored = true;
-        } else {
-            // The OpenAQ fetch succeeded, but saving to MySQL failed.
-            error_log('CityPulse air-quality insert failed: ' . mysqli_error($conn));
+            mysqli_stmt_bind_param($stmt, 'sddddddss', $loc, $stationLatValue, $stationLngValue, $stationPm25, $stationPm10, $stationNo2, $stationO3, $stationSeverity, $recordedAt);
+            if (mysqli_stmt_execute($stmt)) {
+                $stored = true;
+            } else {
+                error_log('CityPulse air-quality insert failed: ' . mysqli_error($conn));
+            }
         }
         mysqli_stmt_close($stmt);
     }
@@ -500,11 +561,12 @@ header('Content-Type: application/json');
 echo json_encode([
     'success'      => true,
     'source'       => 'OpenAQ',
-    'location'     => AIR_QUALITY_LOCATION,
+    'location'     => $airQualityLocation,
     'latitude'     => $stationLat,
     'longitude'    => $stationLng,
     'station'      => $stationName,
-    'measurements' => $measurements,
+    'measurements' => $summaryMeasurements,
+    'stations'     => $nearbyStations,
     'severity'     => $severity,
     'recorded_at'  => $recordedAt,
     'stored'       => $stored,

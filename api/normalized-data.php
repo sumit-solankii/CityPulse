@@ -34,6 +34,9 @@
 ini_set('display_errors', '0');
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/location.php';
+
+$nearby = citypulse_request_location();
 
 /**
  * Convert any stored severity wording into the standard set:
@@ -72,7 +75,8 @@ $latestTimestamp = null;
 // ------------------------------------------------------------
 // 1) Weather -> value = temperature
 // ------------------------------------------------------------
-$result = mysqli_query($conn, 'SELECT location, latitude, longitude, temperature, rainfall, severity, recorded_at FROM weather_data ORDER BY recorded_at DESC LIMIT 100');
+$weatherWhere = citypulse_distance_sql($nearby['latitude'], $nearby['longitude'], $nearby['radius_km'], 'w');
+$result = mysqli_query($conn, 'SELECT w.location, w.latitude, w.longitude, w.temperature, w.rainfall, w.severity, w.recorded_at FROM weather_data AS w WHERE ' . $weatherWhere . ' ORDER BY w.recorded_at DESC LIMIT 100');
 
 if (!$result) {
     error_log('CityPulse normalized-data weather query failed: ' . mysqli_error($conn));
@@ -104,7 +108,8 @@ while ($row = mysqli_fetch_assoc($result)) {
 // ------------------------------------------------------------
 // 2) Traffic -> value = delay_minutes
 // ------------------------------------------------------------
-$result = mysqli_query($conn, 'SELECT location, latitude, longitude, delay_minutes, severity, recorded_at FROM traffic_data ORDER BY recorded_at DESC LIMIT 100');
+$trafficWhere = citypulse_distance_sql($nearby['latitude'], $nearby['longitude'], $nearby['radius_km'], 't');
+$result = mysqli_query($conn, 'SELECT t.location, t.latitude, t.longitude, t.delay_minutes, t.severity, t.recorded_at FROM traffic_data AS t WHERE ' . $trafficWhere . ' ORDER BY t.recorded_at DESC LIMIT 100');
 
 if (!$result) {
     error_log('CityPulse normalized-data traffic query failed: ' . mysqli_error($conn));
@@ -135,7 +140,8 @@ while ($row = mysqli_fetch_assoc($result)) {
 // ------------------------------------------------------------
 // 3) Incidents -> value = incident_type
 // ------------------------------------------------------------
-$result = mysqli_query($conn, 'SELECT location, latitude, longitude, incident_type, severity, recorded_at FROM incidents ORDER BY recorded_at DESC LIMIT 100');
+$incidentWhere = citypulse_distance_sql($nearby['latitude'], $nearby['longitude'], $nearby['radius_km'], 'i');
+$result = mysqli_query($conn, 'SELECT i.location, i.latitude, i.longitude, i.incident_type, i.severity, i.recorded_at FROM incidents AS i WHERE ' . $incidentWhere . ' ORDER BY i.recorded_at DESC LIMIT 100');
 
 if (!$result) {
     error_log('CityPulse normalized-data incidents query failed: ' . mysqli_error($conn));
@@ -166,7 +172,8 @@ while ($row = mysqli_fetch_assoc($result)) {
 // ------------------------------------------------------------
 // 4) Air quality -> value = pm25 (µg/m³)
 // ------------------------------------------------------------
-$result = mysqli_query($conn, 'SELECT location, latitude, longitude, pm25, severity, recorded_at FROM air_quality_data ORDER BY recorded_at DESC LIMIT 100');
+$airQualityWhere = citypulse_distance_sql($nearby['latitude'], $nearby['longitude'], $nearby['radius_km'], 'a');
+$result = mysqli_query($conn, 'SELECT a.location, a.latitude, a.longitude, a.pm25, a.severity, a.recorded_at FROM air_quality_data AS a WHERE ' . $airQualityWhere . ' ORDER BY a.recorded_at DESC LIMIT 100');
 
 if (!$result) {
     error_log('CityPulse normalized-data air_quality query failed: ' . mysqli_error($conn));

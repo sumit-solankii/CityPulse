@@ -2,7 +2,7 @@
 /**
  * CityPulse - Weather API (Step 4)
  *
- * Fetches the current weather for Jaipur, Rajasthan from the free
+ * Fetches current weather for the browser-provided location from the free
  * Open-Meteo API, maps it into a simple CityPulse structure, and
  * stores a record in the weather_data table.
  *
@@ -18,14 +18,15 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/location.php';
 
 // How often we keep a weather record (in seconds). 600 = 10 minutes.
 define('WEATHER_MIN_INTERVAL_SECONDS', 600);
 
-// Jaipur, Rajasthan - initial location.
-define('WEATHER_LOCATION', 'Jaipur');
-define('WEATHER_LATITUDE', 26.9124);
-define('WEATHER_LONGITUDE', 75.7873);
+$nearby = citypulse_request_location();
+$weatherLatitude = $nearby['latitude'];
+$weatherLongitude = $nearby['longitude'];
+$weatherLocation = 'Current area';
 
 /**
  * Convert an Open-Meteo WMO weather code into a simple
@@ -119,10 +120,10 @@ function weather_severity($code, $temperature, $rain, $windSpeed)
 // 1) Call the Open-Meteo API.
 // ------------------------------------------------------------
 $url = 'https://api.open-meteo.com/v1/forecast'
-    . '?latitude=' . WEATHER_LATITUDE
-    . '&longitude=' . WEATHER_LONGITUDE
+    . '?latitude=' . $weatherLatitude
+    . '&longitude=' . $weatherLongitude
     . '&current=temperature_2m,relative_humidity_2m,precipitation,rain,wind_speed_10m,weather_code'
-    . '&timezone=Asia%2FKolkata';
+    . '&timezone=auto';
 
 // Add a timeout so a slow weather service never hangs the page.
 $context = stream_context_create([
@@ -167,9 +168,9 @@ $windSpeed    = (float) $current['wind_speed_10m'];
 $weatherCode  = (int) $current['weather_code'];
 
 $result = [
-    'location'          => WEATHER_LOCATION,
-    'latitude'          => WEATHER_LATITUDE,
-    'longitude'         => WEATHER_LONGITUDE,
+    'location'          => $weatherLocation,
+    'latitude'          => $weatherLatitude,
+    'longitude'         => $weatherLongitude,
     'temperature'       => $temperature,
     'relative_humidity' => $humidity,
     'rainfall'          => $rainfall,
@@ -183,7 +184,8 @@ $result = [
 // ------------------------------------------------------------
 // 3) Store the weather record only if the previous one is old.
 // ------------------------------------------------------------
-$latestRow = mysqli_query($conn, 'SELECT MAX(recorded_at) AS latest FROM weather_data');
+$weatherWhere = citypulse_distance_sql($weatherLatitude, $weatherLongitude, $nearby['radius_km'], 'w');
+$latestRow = mysqli_query($conn, 'SELECT MAX(w.recorded_at) AS latest FROM weather_data AS w WHERE ' . $weatherWhere);
 
 if (!$latestRow) {
     error_log('CityPulse weather: latest-record query failed: ' . mysqli_error($conn));
@@ -203,9 +205,9 @@ if ($latest !== null && (time() - strtotime($latest)) < WEATHER_MIN_INTERVAL_SEC
 
     // mysqli_stmt_bind_param needs plain variables (it binds by reference),
     // so copy the values into local variables first.
-    $loc       = WEATHER_LOCATION;
-    $lat       = WEATHER_LATITUDE;
-    $lng       = WEATHER_LONGITUDE;
+    $loc       = $weatherLocation;
+    $lat       = $weatherLatitude;
+    $lng       = $weatherLongitude;
     $condition = $result['weather_condition'];
     $severity  = $result['severity'];
     $recorded  = $result['recorded_at'];

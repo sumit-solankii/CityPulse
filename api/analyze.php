@@ -63,6 +63,9 @@ function minutes_between($tsA, $tsB)
 $scheme   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host     = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
 $scriptDir = isset($_SERVER['SCRIPT_NAME']) ? dirname($_SERVER['SCRIPT_NAME']) : '/CityPulse/api';
+$locationQuery = isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] !== ''
+    ? '?' . $_SERVER['QUERY_STRING']
+    : '';
 
 $context = stream_context_create([
     'http' => [
@@ -72,7 +75,7 @@ $context = stream_context_create([
     ],
 ]);
 
-$response = @file_get_contents("{$scheme}://{$host}{$scriptDir}/normalized-data.php", false, $context);
+$response = @file_get_contents("{$scheme}://{$host}{$scriptDir}/normalized-data.php{$locationQuery}", false, $context);
 $normalized = json_decode($response, true);
 
 // If the normalized feed is unavailable, return an empty, safe analysis.
