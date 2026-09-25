@@ -1924,6 +1924,14 @@
             });
         }
 
+        var radiusSelect = el("map-radius");
+        if (radiusSelect) {
+            radiusSelect.addEventListener("change", function () {
+                NEARBY_RADIUS_KM = parseFloat(radiusSelect.value) || 10;
+                if (!state.demoMode) loadAll();
+            });
+        }
+
         startUserLocationTracking(true);
     }
 
@@ -1942,18 +1950,16 @@
         heatLayer = null;
 
         var n = activeView().normalized;
-        if (!n || !n.success || !n.data || !n.data.length) {
-            mapNotice("Map data temporarily unavailable.");
-            applyMapFilter();
-            return;
-        }
-
-        mapNotice("");
+        var normalizedRecords = n && n.success && Array.isArray(n.data) ? n.data : [];
         var bounds = L.latLngBounds([]);
         var heatPoints = [];
         var markerCount = 0;
+        var validCoordinateCount = 0;
+        var nearbyCount = 0;
+        var rejectedDistanceCount = 0;
+        var sourceCounts = {};
 
-        var mapRecords = n.data.slice();
+        var mapRecords = normalizedRecords.slice();
         var airQuality = activeView().airQuality;
         if (airQuality && Array.isArray(airQuality.stations)) {
             airQuality.stations.forEach(function (station) {
@@ -1972,6 +1978,19 @@
         }
 
         mapRecords.forEach(function (record) {
+            sourceCounts[record.source] = (sourceCounts[record.source] || 0) + 1;
+        });
+
+        mapRecords.forEach(function (record) {
+            var lat = parseFloat(record.latitude);
+            var lng = parseFloat(record.longitude);
+            if (!isFinite(lat) || !isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+            validCoordinateCount++;
+            if (state.currentLocation && distanceKm(state.currentLocation, { latitude: lat, longitude: lng }) > NEARBY_RADIUS_KM) {
+                rejectedDistanceCount++;
+                return;
+            }
+            nearbyCount++;
             if (!areaMatches(record.location)) return;
             var source = record.source === "incident" ? "incident" : record.source;
             var category = issueCategory(record);
@@ -1979,6 +1998,10 @@
             if (mapCategoryFilter !== "all" && mapCategoryFilter !== category) return;
             var marker = makeMapMarker(record);
             if (!marker) return;
+            if (!mapGroups[source]) {
+                console.warn("[CityPulse map] Unknown record source:", source, record);
+                return;
+            }
             mapGroups[source].addLayer(marker);
             bounds.extend(marker.getLatLng());
             markerCount++;
@@ -1986,6 +2009,25 @@
             var weight = source === "incident" ? 1.0 : (source === "traffic" ? 0.75 : 0.35);
             heatPoints.push([parseFloat(record.latitude), parseFloat(record.longitude), weight]);
         });
+
+        console.info("[CityPulse map]", {
+            userLocation: state.currentLocation ? [state.currentLocation.latitude, state.currentLocation.longitude] : null,
+            totalRecordsReceived: mapRecords.length,
+            validCoordinateRecords: validCoordinateCount,
+            recordsInsideRadius: nearbyCount,
+            recordsRejectedByDistance: rejectedDistanceCount,
+            markersCreated: markerCount,
+            sourceCounts: sourceCounts,
+            radiusKm: NEARBY_RADIUS_KM
+        });
+
+        if (!mapRecords.length) {
+            mapNotice("No nearby civic records found.");
+        } else if (!markerCount) {
+            mapNotice("Nearby records have no visible markers for the selected filters.");
+        } else {
+            mapNotice(markerCount + " nearby civic marker" + (markerCount === 1 ? "" : "s") + ".");
+        }
 
         applyMapFilter();
 

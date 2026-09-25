@@ -1038,6 +1038,20 @@ body.dashboard-page {
     color: var(--red);
 }
 
+.map-radius-control {
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.map-radius-control select {
+    margin-left: 0.3rem;
+    padding: 0.25rem 0.45rem;
+    color: var(--text);
+    background: #101013;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
 .cp-user-location-icon {
     background: transparent;
     border: 0;
