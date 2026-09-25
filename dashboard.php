@@ -26,6 +26,8 @@
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="assets/css/dashboard.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin="">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" crossorigin="">
 </head>
 <body class="dashboard-page">
     <header class="dash-header">
@@ -197,7 +199,7 @@
         <section class="card map-card">
             <div class="map-head">
                 <h2>LIVE CIVIC MAP</h2>
-                <div class="map-filters" role="group" aria-label="Filter map markers">
+                <div class="map-filters" role="group" aria-label="Filter map data sources">
                     <button type="button" class="map-filter-btn active" data-filter="all">All</button>
                     <button type="button" class="map-filter-btn" data-filter="weather">Weather</button>
                     <button type="button" class="map-filter-btn" data-filter="traffic">Traffic</button>
@@ -205,13 +207,24 @@
                     <button type="button" class="map-filter-btn" data-filter="air_quality">Air Quality</button>
                 </div>
             </div>
+            <div class="map-category-filters" role="group" aria-label="Filter civic issue categories">
+                <span class="map-filter-label">Issue categories</span>
+                <button type="button" class="map-category-btn active" data-category-filter="all">All</button>
+                <button type="button" class="map-category-btn" data-category-filter="roads"><span class="category-swatch category-roads"></span>Roads</button>
+                <button type="button" class="map-category-btn" data-category-filter="garbage"><span class="category-swatch category-garbage"></span>Garbage</button>
+                <button type="button" class="map-category-btn" data-category-filter="water"><span class="category-swatch category-water"></span>Water</button>
+                <button type="button" class="map-category-btn" data-category-filter="electricity"><span class="category-swatch category-electricity"></span>Electricity</button>
+                <button type="button" class="map-category-btn" data-category-filter="other"><span class="category-swatch category-other"></span>Other</button>
+            </div>
             <div id="cityMap" class="city-map"></div>
             <p id="map-notice" class="map-notice"></p>
             <div class="map-legend">
-                <span class="legend-item"><span class="legend-dot dot-weather"></span> Weather</span>
-                <span class="legend-item"><span class="legend-dot dot-traffic"></span> Traffic</span>
-                <span class="legend-item"><span class="legend-dot dot-incident"></span> Incident</span>
-                <span class="legend-item"><span class="legend-dot dot-air_quality"></span> Air Quality</span>
+                <span class="legend-item"><span class="legend-dot category-roads"></span> Roads</span>
+                <span class="legend-item"><span class="legend-dot category-garbage"></span> Garbage</span>
+                <span class="legend-item"><span class="legend-dot category-water"></span> Water</span>
+                <span class="legend-item"><span class="legend-dot category-electricity"></span> Electricity</span>
+                <span class="legend-item"><span class="legend-dot category-other"></span> Other</span>
+                <span class="legend-item"><span class="legend-dot dot-traffic"></span> Traffic feed</span>
                 <span class="legend-note muted">Map tiles &copy; OpenStreetMap contributors &middot; civic data from CityPulse APIs</span>
             </div>
         </section>
@@ -269,6 +282,8 @@
     </footer>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" crossorigin=""></script>
     <script src="assets/js/main.js"></script>
     <script src="assets/js/dashboard.js"></script>
 </body>

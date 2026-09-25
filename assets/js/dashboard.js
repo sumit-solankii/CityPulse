@@ -43,6 +43,8 @@
     var map = null;
     var mapGroups = null;
     var mapFilter = "all";
+    var mapCategoryFilter = "all";
+    var heatLayer = null;
     var DEMO_SCENARIOS = {
         NORMAL: "NORMAL",
         MODERATE: "MODERATE",
@@ -1345,7 +1347,7 @@
         return total / matching.length;
     }
 
-    function appendCivicMetric(metric, buckets, hasData, latestText) {
+    function appendCivicMetric(metric, buckets, latestText) {
         var card = document.createElement("article");
         card.className = "civic-trend-metric";
 
@@ -1357,14 +1359,6 @@
         note.className = "civic-trend-metric-note";
         note.textContent = metric.note;
         card.appendChild(note);
-
-        if (!hasData) {
-            var unavailable = document.createElement("p");
-            unavailable.className = "empty-note";
-            unavailable.textContent = "Data unavailable";
-            card.appendChild(unavailable);
-            return card;
-        }
 
         var maxValue = Math.max.apply(null, buckets.map(function (bucket) {
             return civicMetricValue(metric, bucket);
@@ -1410,8 +1404,8 @@
         if (demoLabel) demoLabel.classList.toggle("hidden", !state.demoMode);
 
         if (!view.normalized || !view.normalized.success || !Array.isArray(view.normalized.data)) {
-            grid.innerHTML = '<p class="empty-note">Trend data temporarily unavailable.</p>';
-            summary.textContent = "Trend data temporarily unavailable.";
+            grid.innerHTML = '<p class="empty-note">Could not load trend data. The database/API may be unavailable.</p>';
+            summary.textContent = "Trend data could not be loaded.";
             return;
         }
 
@@ -1458,7 +1452,7 @@
             var sourceRecords = records.filter(function (record) {
                 return (metric.source === "incidents" ? record.source === "incident" : record.source === metric.source);
             });
-            var latestText = "No latest reading available.";
+            var latestText = "No records in the selected period.";
             if (metric.source === "weather" && view.weather && view.weather.recorded_at && view.weather.rainfall !== undefined) {
                 latestText = "Latest rainfall: " + view.weather.rainfall + " mm";
             } else if (metric.source === "air_quality" && view.airQuality && view.airQuality.measurements && view.airQuality.measurements.pm25 !== null) {
@@ -1466,7 +1460,7 @@
             } else if (sourceRecords.length) {
                 latestText = "Latest observation: " + fmtShortTime(sourceRecords[0].timestamp);
             }
-            grid.appendChild(appendCivicMetric(metric, buckets, sourceRecords.length > 0, latestText));
+            grid.appendChild(appendCivicMetric(metric, buckets, latestText));
         });
 
         summary.textContent = records.length + " event" + (records.length === 1 ? "" : "s") +
@@ -1615,28 +1609,49 @@
         return '<div class="cp-popup-row"><span class="lbl">' + esc(label) + '</span><span class="val">' + esc(value) + '</span></div>';
     }
 
-    function popupHtml(record) {
-        var valueLabel, valueText;
-        if (record.source === "weather") {
-            valueLabel = "Temperature";
-            valueText = record.value + " °C";
-        } else if (record.source === "traffic") {
-            valueLabel = "Delay";
-            valueText = record.value + " min";
-        } else if (record.source === "air_quality") {
-            valueLabel = "PM2.5";
-            valueText = record.value + " µg/m³";
-        } else {
-            valueLabel = "Type";
-            valueText = record.value;
+    function issueCategory(record) {
+        if (record.source === "traffic") return "roads";
+        if (record.source !== "incident") return "other";
+
+        var text = String(record.value || "") + " " + String(record.description || "");
+        text = text.toLowerCase();
+        if (/pothole|road|traffic|closure|signal|street/.test(text)) return "roads";
+        if (/garbage|dump|waste|trash|litter/.test(text)) return "garbage";
+        if (/water|drain|seep|leak|flood/.test(text)) return "water";
+        if (/power|electric|transformer|outage|utility/.test(text)) return "electricity";
+        return "other";
+    }
+
+    function categoryLabel(category) {
+        return category.charAt(0).toUpperCase() + category.slice(1);
+    }
+
+    function incidentDetails(record) {
+        var incidents = Array.isArray(state.incidents) ? state.incidents : [];
+        for (var i = 0; i < incidents.length; i++) {
+            var incident = incidents[i];
+            if (incident.location === record.location
+                && incident.incident_type === record.value
+                && incident.recorded_at === record.timestamp) {
+                return incident;
+            }
         }
+        return null;
+    }
+
+    function popupHtml(record) {
+        var category = issueCategory(record);
+        var incident = record.source === "incident" ? incidentDetails(record) : null;
+        var description = incident && incident.description ? incident.description : "No description supplied.";
+        var status = incident && incident.severity ? incident.severity : (record.severity || "NORMAL");
 
         return '<div class="cp-popup">'
-            + '<div class="cp-popup-type">' + esc(record.source).toUpperCase() + '</div>'
+            + '<div class="cp-popup-type category-' + esc(category) + '">' + esc(categoryLabel(category)) + '</div>'
             + popupRow("Location", record.location)
-            + popupRow(valueLabel, valueText)
-            + popupRow("Severity", record.severity)
-            + popupRow("Time", fmtShortTime(record.timestamp))
+            + popupRow("Description", description)
+            + popupRow("Status", status)
+            + popupRow("Report date", record.timestamp || "Unknown")
+            + popupRow("Data feed", record.source)
             + '</div>';
     }
 
@@ -1649,18 +1664,40 @@
         }
 
         var source = record.source === "incident" ? "incident" : record.source;
+        var category = issueCategory(record);
         var off = MARKER_OFFSET[source] || { lat: 0, lng: 0 };
 
         var icon = L.divIcon({
             className: "cp-marker",
-            html: '<span class="cp-dot dot-' + source + '"></span>',
-            iconSize: [18, 18],
-            iconAnchor: [9, 9]
+            html: '<span class="cp-dot category-' + category + '" aria-label="' + esc(categoryLabel(category)) + '">' + category.charAt(0).toUpperCase() + '</span>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
         });
 
         var marker = L.marker([lat + off.lat, lng + off.lng], { icon: icon });
+        marker._cpSource = source;
+        marker._cpCategory = category;
         marker.bindPopup(popupHtml(record));
         return marker;
+    }
+
+    function createMapGroup() {
+        if (typeof L.markerClusterGroup === "function") {
+            return L.markerClusterGroup({
+                showCoverageOnHover: false,
+                spiderfyOnMaxZoom: true,
+                maxClusterRadius: 42,
+                disableClusteringAtZoom: 16,
+                iconCreateFunction: function (cluster) {
+                    return L.divIcon({
+                        className: "cp-cluster",
+                        html: '<span>' + cluster.getChildCount() + '</span>',
+                        iconSize: [34, 34]
+                    });
+                }
+            });
+        }
+        return L.layerGroup();
     }
 
     function initMap() {
@@ -1683,10 +1720,10 @@
         }).addTo(map);
 
         mapGroups = {
-            weather: L.layerGroup(),
-            traffic: L.layerGroup(),
-            incident: L.layerGroup(),
-            air_quality: L.layerGroup()
+            weather: createMapGroup(),
+            traffic: createMapGroup(),
+            incident: createMapGroup(),
+            air_quality: createMapGroup()
         };
 
         // Filter buttons - show/hide marker groups without reloading the page.
@@ -1696,7 +1733,17 @@
                     b.classList.toggle("active", b === btn);
                 });
                 mapFilter = btn.getAttribute("data-filter");
-                applyMapFilter();
+                updateMapMarkers();
+            });
+        });
+
+        document.querySelectorAll(".map-category-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                document.querySelectorAll(".map-category-btn").forEach(function (b) {
+                    b.classList.toggle("active", b === btn);
+                });
+                mapCategoryFilter = btn.getAttribute("data-category-filter");
+                updateMapMarkers();
             });
         });
     }
@@ -1704,11 +1751,7 @@
     function applyMapFilter() {
         if (!map || !mapGroups) return;
         Object.keys(mapGroups).forEach(function (key) {
-            if (mapFilter === "all" || mapFilter === key) {
-                if (!map.hasLayer(mapGroups[key])) map.addLayer(mapGroups[key]);
-            } else if (map.hasLayer(mapGroups[key])) {
-                map.removeLayer(mapGroups[key]);
-            }
+            if (!map.hasLayer(mapGroups[key])) map.addLayer(mapGroups[key]);
         });
     }
 
@@ -1716,6 +1759,8 @@
         if (!map || !mapGroups) return;
 
         Object.keys(mapGroups).forEach(function (key) { mapGroups[key].clearLayers(); });
+        if (heatLayer && map.hasLayer(heatLayer)) map.removeLayer(heatLayer);
+        heatLayer = null;
 
         var n = activeView().normalized;
         if (!n || !n.success || !n.data || !n.data.length) {
@@ -1725,13 +1770,43 @@
         }
 
         mapNotice("");
+        var bounds = L.latLngBounds([]);
+        var heatPoints = [];
+        var markerCount = 0;
+
         n.data.forEach(function (record) {
             if (!areaMatches(record.location)) return;
+            var source = record.source === "incident" ? "incident" : record.source;
+            var category = issueCategory(record);
+            if (mapFilter !== "all" && mapFilter !== source) return;
+            if (mapCategoryFilter !== "all" && mapCategoryFilter !== category) return;
             var marker = makeMapMarker(record);
             if (!marker) return;
-            var key = record.source === "incident" ? "incident" : record.source;
-            mapGroups[key].addLayer(marker);
+            mapGroups[source].addLayer(marker);
+            bounds.extend(marker.getLatLng());
+            markerCount++;
+
+            var weight = source === "incident" ? 1.0 : (source === "traffic" ? 0.75 : 0.35);
+            heatPoints.push([parseFloat(record.latitude), parseFloat(record.longitude), weight]);
         });
+
+        applyMapFilter();
+
+        if (typeof L.heatLayer === "function" && heatPoints.length) {
+            heatLayer = L.heatLayer(heatPoints, {
+                radius: 34,
+                blur: 24,
+                maxZoom: 15,
+                max: 2,
+                gradient: { 0.15: "#facc15", 0.45: "#fb923c", 0.75: "#f87171", 1: "#ffffff" }
+            }).addTo(map);
+        }
+
+        if (markerCount === 1) {
+            map.setView(bounds.getCenter(), 14);
+        } else if (markerCount > 1) {
+            map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+        }
 
         applyMapFilter();
     }
