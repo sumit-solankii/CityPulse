@@ -31,6 +31,15 @@
     var civicTrendHours = 6;
     var NEARBY_RADIUS_KM = 25;
     var LOCATION_REFRESH_THRESHOLD_KM = 0.5;
+    var DEMO_MODE = true;
+    var DEMO_LOCATION = {
+        latitude: 26.9124,
+        longitude: 75.7873,
+        accuracy: 0,
+        city: "Jaipur",
+        state: "Rajasthan",
+        country: "India"
+    };
 
     // Leaflet map (Step 8): the browser location is the live center.
     var MAP_ZOOM = 12;
@@ -59,7 +68,7 @@
         airQuality: null,
         analysis: null,
         normalized: null,
-        currentLocation: null,
+        currentLocation: DEMO_MODE ? DEMO_LOCATION : null,
         fetchErrors: {},
         insightSignature: null,
         insightRequest: null
@@ -170,7 +179,7 @@
         if (toggle) {
             toggle.classList.toggle("is-demo", state.demoMode);
             toggle.setAttribute("aria-pressed", String(state.demoMode));
-            toggle.textContent = state.demoMode ? "Demo Mode: ON" : "Demo Mode: OFF";
+            toggle.textContent = state.demoMode ? "Scenario Mode: ON" : "Scenario Mode: OFF";
         }
 
         if (chip) chip.classList.toggle("hidden", !state.demoMode);
@@ -421,7 +430,7 @@
     function renderAll() {
         state.view = buildAreaView();
         setText("selected-area-label", state.selectedArea === "ALL"
-            ? (state.currentLocation ? "Current area" : "All Areas")
+            ? (DEMO_MODE ? DEMO_LOCATION.city : (state.currentLocation ? "Current area" : "All Areas"))
             : state.selectedArea);
         renderWeather();
         renderTraffic();
@@ -1727,7 +1736,7 @@
         state.currentLocation = nextLocation;
         if (state.selectedArea === "ALL") setText("selected-area-label", "Current area");
         var userIcon = L.divIcon({
-            className: "cp-user-location-icon",
+            className: DEMO_MODE ? "cp-demo-location-icon" : "cp-user-location-icon",
             html: '<span aria-hidden="true"></span>',
             iconSize: [24, 24],
             iconAnchor: [12, 12]
@@ -1735,9 +1744,11 @@
 
         if (!userLocationMarker) {
             userLocationMarker = L.marker(latLng, { icon: userIcon, zIndexOffset: 1000 })
-                .bindPopup("<strong>You are here</strong>");
+                .bindPopup(DEMO_MODE ? "<strong>Demo Location: Jaipur</strong>" : "<strong>You are here</strong>");
             userLocationMarker.addTo(map);
         } else {
+            userLocationMarker.setIcon(userIcon);
+            userLocationMarker.setPopupContent(DEMO_MODE ? "<strong>Demo Location: Jaipur</strong>" : "<strong>You are here</strong>");
             userLocationMarker.setLatLng(latLng);
         }
 
@@ -1755,8 +1766,8 @@
             userAccuracyCircle.setRadius(accuracy);
         }
 
-        locationStatus("Location updated" + (accuracy ? " (accuracy " + Math.round(accuracy) + " m)" : "."));
-        if (locationMoved && !state.demoMode) loadAll();
+        locationStatus(DEMO_MODE ? "Demo Location: Jaipur" : "Location updated" + (accuracy ? " (accuracy " + Math.round(accuracy) + " m)" : "."));
+        if (locationMoved && !state.demoMode && !DEMO_MODE) loadAll();
         if (centerOnNextLocation) {
             map.setView(latLng, Math.max(map.getZoom(), 15));
             centerOnNextLocation = false;
@@ -1764,6 +1775,16 @@
     }
 
     function startUserLocationTracking(shouldCenter) {
+        if (DEMO_MODE) {
+            state.currentLocation = DEMO_LOCATION;
+            if (map) {
+                updateUserLocation({ coords: DEMO_LOCATION });
+                map.setView([DEMO_LOCATION.latitude, DEMO_LOCATION.longitude], 13);
+            }
+            locationStatus("Demo Location: Jaipur");
+            return;
+        }
+
         if (!navigator.geolocation) {
             locationStatus("This browser does not support location services.", true);
             return;
@@ -1935,9 +1956,15 @@
         });
 
         var locationButton = el("map-location-button");
+        var demoLocationLabel = el("demo-location-label");
+        if (demoLocationLabel) demoLocationLabel.classList.toggle("hidden", !DEMO_MODE);
         if (locationButton) {
             locationButton.addEventListener("click", function () {
-                startUserLocationTracking(true);
+                if (DEMO_MODE) {
+                    startUserLocationTracking(true);
+                } else {
+                    startUserLocationTracking(true);
+                }
             });
         }
 
@@ -2203,6 +2230,6 @@
     setInterval(tickClock, 1000);
     renderDemoControls();
     initMap();
-    loadAll();
+    if (DEMO_MODE) loadAll();
     setInterval(loadAll, REFRESH_INTERVAL_MS);
 })();

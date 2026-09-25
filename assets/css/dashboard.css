@@ -1038,6 +1038,13 @@ body.dashboard-page {
     color: var(--red);
 }
 
+.demo-location-indicator {
+    color: var(--accent);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
 .map-radius-control {
     color: var(--muted);
     font-size: 0.76rem;
@@ -1224,4 +1231,20 @@ body.dashboard-page {
         margin-left: 0;
         width: 100%;
     }
+}
+
+.cp-demo-location-icon {
+    background: transparent;
+    border: 0;
+}
+
+.cp-demo-location-icon span {
+    display: block;
+    width: 20px;
+    height: 20px;
+    margin: 2px;
+    border: 3px solid #fff7cc;
+    border-radius: 50%;
+    background: #eab308;
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.3), 0 2px 8px rgba(0, 0, 0, 0.65);
 }

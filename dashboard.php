@@ -225,6 +225,7 @@
                         <option value="25" selected>25 km</option>
                     </select>
                 </label>
+                <span id="demo-location-label" class="demo-location-indicator hidden">DEMO MODE &bull; Jaipur</span>
                 <span id="map-location-status" class="map-location-status" role="status" aria-live="polite"></span>
             </div>
             <div id="cityMap" class="city-map"></div>
