@@ -216,6 +216,10 @@
                 <button type="button" class="map-category-btn" data-category-filter="electricity"><span class="category-swatch category-electricity"></span>Electricity</button>
                 <button type="button" class="map-category-btn" data-category-filter="other"><span class="category-swatch category-other"></span>Other</button>
             </div>
+            <div class="map-location-controls">
+                <button type="button" id="map-location-button" class="map-location-button">My Location</button>
+                <span id="map-location-status" class="map-location-status" role="status" aria-live="polite"></span>
+            </div>
             <div id="cityMap" class="city-map"></div>
             <p id="map-notice" class="map-notice"></p>
             <div class="map-legend">

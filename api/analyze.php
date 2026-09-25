@@ -119,7 +119,7 @@ foreach ($records as $record) {
             $incidentsByLocation[$loc] = ['count' => 0, 'timestamp' => null];
         }
         // Count only "recent" incidents for the incident anomaly rule.
-        if ($ts >= $incidentCutoff) {
+        if (strtotime($ts) >= strtotime($incidentCutoff)) {
             $incidentsByLocation[$loc]['count']++;
             if ($incidentsByLocation[$loc]['timestamp'] === null || $ts > $incidentsByLocation[$loc]['timestamp']) {
                 $incidentsByLocation[$loc]['timestamp'] = $ts;

@@ -224,5 +224,6 @@ if ($latest !== null && (time() - strtotime($latest)) < WEATHER_MIN_INTERVAL_SEC
 // ------------------------------------------------------------
 // 4) Return the weather as JSON.
 // ------------------------------------------------------------
+header('X-CityPulse-Fetched-At: ' . gmdate('c'));
 header('Content-Type: application/json');
 echo json_encode($result, JSON_PRETTY_PRINT);

@@ -32,7 +32,6 @@
 
     // Leaflet map (Step 8): centered on Jaipur. A tiny visual offset
     // keeps overlapping markers in the same zone clickable.
-    var MAP_CENTER = [26.9124, 75.7873];
     var MAP_ZOOM = 12;
     var MARKER_OFFSET = {
         weather:  { lat: 0,      lng: 0 },
@@ -45,6 +44,10 @@
     var mapFilter = "all";
     var mapCategoryFilter = "all";
     var heatLayer = null;
+    var userLocationMarker = null;
+    var userAccuracyCircle = null;
+    var locationWatchId = null;
+    var centerOnNextLocation = false;
     var DEMO_SCENARIOS = {
         NORMAL: "NORMAL",
         MODERATE: "MODERATE",
@@ -61,6 +64,7 @@
         airQuality: null,
         analysis: null,
         normalized: null,
+        fetchErrors: {},
         insightSignature: null,
         insightRequest: null
     };
@@ -118,7 +122,16 @@
     function fetchJson(url) {
         return fetch(url).then(function (r) {
             if (!r.ok) throw new Error("HTTP " + r.status);
-            return r.json();
+            return r.json().then(function (payload) {
+                var fetchedAt = r.headers.get("X-CityPulse-Fetched-At");
+                if (fetchedAt && payload && typeof payload === "object") {
+                    payload.__fetched_at = fetchedAt;
+                }
+                if (payload && (payload.error || payload.success === false)) {
+                    throw new Error(payload.message || payload.error || "Data source request failed");
+                }
+                return payload;
+            });
         });
     }
 
@@ -1490,6 +1503,18 @@
             };
         }
 
+        var fetchError = state.fetchErrors[kind];
+        if (fetchError) {
+            if (!payload) {
+                return { status: "OFFLINE", message: "Data source request failed: " + fetchError, latest: null };
+            }
+            return {
+                status: "DEGRADED",
+                message: "Using cached data; latest refresh failed.",
+                latest: payload.__fetched_at || payload.recorded_at || null
+            };
+        }
+
         if (!payload) {
             return { status: "OFFLINE", message: "Data source status temporarily unavailable.", latest: null };
         }
@@ -1498,21 +1523,22 @@
         }
 
         var latest = null;
+        var fetchedAt = payload.__fetched_at || null;
         var usable = false;
-        var incomplete = false;
 
         if (kind === "weather") {
             usable = typeof payload.temperature === "number" && isFinite(payload.temperature) && !!payload.recorded_at;
-            latest = payload.recorded_at || null;
+            latest = fetchedAt || payload.recorded_at || null;
         } else if (kind === "traffic" || kind === "incidents") {
             if (Array.isArray(payload)) {
+                usable = true;
+                latest = fetchedAt || null;
                 payload.forEach(function (record) {
-                    if (record && record.recorded_at && (!latest || record.recorded_at > latest)) {
+                    if (!latest && record && record.recorded_at) {
                         latest = record.recorded_at;
                     }
                     var recordUsable = record && !!record.recorded_at && !!record.location;
-                    if (recordUsable) usable = true;
-                    if (!recordUsable) incomplete = true;
+                    if (!recordUsable && payload.length > 0) usable = false;
                 });
             }
         } else if (kind === "air_quality") {
@@ -1525,8 +1551,7 @@
                 }
             });
             usable = availableMeasurements > 0 && !!payload.recorded_at;
-            incomplete = availableMeasurements < measurementNames.length;
-            latest = payload.recorded_at || null;
+            latest = fetchedAt || payload.recorded_at || null;
         }
 
         if (!usable) {
@@ -1534,14 +1559,18 @@
         }
 
         var ageMinutes = latest ? (Date.now() - parseTs(latest).getTime()) / 60000 : Infinity;
-        if (!isFinite(ageMinutes) || ageMinutes > maxAgeMinutes || incomplete) {
+        if (!isFinite(ageMinutes) || ageMinutes > maxAgeMinutes) {
             var degradedMessage = ageMinutes > maxAgeMinutes
                 ? "Data is stale; last update " + fmtShortTime(latest) + "."
-                : "Data is partially available.";
+                : "Data refresh time is unknown.";
             return { status: "DEGRADED", message: degradedMessage, latest: latest };
         }
 
-        return { status: "ONLINE", message: "Updated recently.", latest: latest };
+        return {
+            status: "HEALTHY",
+            message: Array.isArray(payload) && payload.length === 0 ? "No new records." : "Updated recently.",
+            latest: latest
+        };
     }
 
     function renderSources() {
@@ -1603,6 +1632,96 @@
     function mapNotice(text) {
         var node = el("map-notice");
         if (node) node.textContent = text || "";
+    }
+
+    function locationStatus(text, isError) {
+        var node = el("map-location-status");
+        if (!node) return;
+        node.textContent = text || "";
+        node.classList.toggle("is-error", !!isError);
+    }
+
+    function locationErrorMessage(error) {
+        if (!error) return "Unable to determine your current location.";
+        if (error.code === 1) return "Location permission is required to show your current location.";
+        if (error.code === 2) return "Your current location is unavailable.";
+        if (error.code === 3) return "The location request timed out. Try My Location again.";
+        return "Unable to determine your current location.";
+    }
+
+    function updateUserLocation(position) {
+        var coords = position && position.coords;
+        if (!coords || !isFinite(coords.latitude) || !isFinite(coords.longitude)) {
+            locationStatus("The browser returned an invalid location.", true);
+            return;
+        }
+
+        var latLng = [coords.latitude, coords.longitude];
+        var accuracy = isFinite(coords.accuracy) ? Math.max(0, coords.accuracy) : 0;
+        var userIcon = L.divIcon({
+            className: "cp-user-location-icon",
+            html: '<span aria-hidden="true"></span>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        });
+
+        if (!userLocationMarker) {
+            userLocationMarker = L.marker(latLng, { icon: userIcon, zIndexOffset: 1000 })
+                .bindPopup("<strong>You are here</strong>");
+            userLocationMarker.addTo(map);
+        } else {
+            userLocationMarker.setLatLng(latLng);
+        }
+
+        if (!userAccuracyCircle) {
+            userAccuracyCircle = L.circle(latLng, {
+                radius: accuracy,
+                color: "#60a5fa",
+                weight: 1,
+                fillColor: "#60a5fa",
+                fillOpacity: 0.16,
+                interactive: false
+            }).addTo(map);
+        } else {
+            userAccuracyCircle.setLatLng(latLng);
+            userAccuracyCircle.setRadius(accuracy);
+        }
+
+        locationStatus("Location updated" + (accuracy ? " (accuracy " + Math.round(accuracy) + " m)" : "."));
+        if (centerOnNextLocation) {
+            map.setView(latLng, Math.max(map.getZoom(), 15));
+            centerOnNextLocation = false;
+        }
+    }
+
+    function startUserLocationTracking(shouldCenter) {
+        if (!navigator.geolocation) {
+            locationStatus("This browser does not support location services.", true);
+            return;
+        }
+
+        if (shouldCenter) {
+            centerOnNextLocation = true;
+            if (userLocationMarker) {
+                map.setView(userLocationMarker.getLatLng(), Math.max(map.getZoom(), 15));
+                centerOnNextLocation = false;
+            }
+        }
+
+        if (locationWatchId !== null) return;
+
+        locationStatus("Requesting your location...");
+        locationWatchId = navigator.geolocation.watchPosition(updateUserLocation, function (error) {
+            locationStatus(locationErrorMessage(error), true);
+            if (error && error.code === 1) {
+                navigator.geolocation.clearWatch(locationWatchId);
+                locationWatchId = null;
+            }
+        }, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 5000
+        });
     }
 
     function popupRow(label, value) {
@@ -1710,7 +1829,8 @@
         }
         if (map) return; // already initialized
 
-        map = L.map("cityMap", { zoomControl: true }).setView(MAP_CENTER, MAP_ZOOM);
+        map = L.map("cityMap", { zoomControl: true });
+        map.fitWorld({ animate: false });
 
         // OpenStreetMap tiles - the geographic layer only.
         // Civic markers come from the CityPulse APIs, not from OpenStreetMap.
@@ -1746,6 +1866,15 @@
                 updateMapMarkers();
             });
         });
+
+        var locationButton = el("map-location-button");
+        if (locationButton) {
+            locationButton.addEventListener("click", function () {
+                startUserLocationTracking(true);
+            });
+        }
+
+        startUserLocationTracking(true);
     }
 
     function applyMapFilter() {
@@ -1802,9 +1931,9 @@
             }).addTo(map);
         }
 
-        if (markerCount === 1) {
+        if (markerCount === 1 && !userLocationMarker) {
             map.setView(bounds.getCenter(), 14);
-        } else if (markerCount > 1) {
+        } else if (markerCount > 1 && !userLocationMarker) {
             map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
         }
 
@@ -1827,12 +1956,25 @@
             fetchJson("api/analyze.php"),
             fetchJson("api/normalized-data.php")
         ]).then(function (results) {
-            state.weather    = results[0].status === "fulfilled" ? results[0].value : null;
-            state.traffic    = results[1].status === "fulfilled" ? results[1].value : null;
-            state.incidents  = results[2].status === "fulfilled" ? results[2].value : null;
-            state.airQuality = results[3].status === "fulfilled" ? results[3].value : null;
-            state.analysis   = results[4].status === "fulfilled" ? results[4].value : null;
-            state.normalized = results[5].status === "fulfilled" ? results[5].value : null;
+            var feeds = [
+                ["weather", "weather"],
+                ["traffic", "traffic"],
+                ["incidents", "incidents"],
+                ["airQuality", "air_quality"],
+                ["analysis", "analysis"],
+                ["normalized", "normalized"]
+            ];
+            feeds.forEach(function (feed, index) {
+                var result = results[index];
+                if (result.status === "fulfilled") {
+                    state[feed[0]] = result.value;
+                    state.fetchErrors[feed[1]] = null;
+                } else {
+                    state.fetchErrors[feed[1]] = result.reason && result.reason.message
+                        ? result.reason.message
+                        : "Request failed";
+                }
+            });
 
             renderAll();
         });
@@ -1898,8 +2040,9 @@
                     "Zone B": [26.8980, 75.7780],
                     "Zone C": [26.9210, 75.8050]
                 };
-                if (areaCenter[state.selectedArea]) map.setView(areaCenter[state.selectedArea], MAP_ZOOM);
-                else map.setView(MAP_CENTER, MAP_ZOOM);
+                if (areaCenter[state.selectedArea] && !userLocationMarker) {
+                    map.setView(areaCenter[state.selectedArea], MAP_ZOOM);
+                }
             }
         });
     }

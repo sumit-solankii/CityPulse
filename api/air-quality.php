@@ -273,6 +273,7 @@ if (!$freshQuery) {
 $freshRow = mysqli_fetch_assoc($freshQuery);
 
 if ($freshRow !== null && (time() - strtotime($freshRow['recorded_at'])) < AIR_QUALITY_MIN_INTERVAL_SECONDS) {
+    header('X-CityPulse-Fetched-At: ' . gmdate('c'));
     header('Content-Type: application/json');
     echo json_encode([
         'success'      => true,
@@ -494,6 +495,7 @@ if ($checkRow) {
 // ------------------------------------------------------------
 // 4) Return the air-quality data as JSON.
 // ------------------------------------------------------------
+header('X-CityPulse-Fetched-At: ' . gmdate('c'));
 header('Content-Type: application/json');
 echo json_encode([
     'success'      => true,

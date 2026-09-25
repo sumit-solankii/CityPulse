@@ -53,6 +53,15 @@ function normalize_severity($value)
     }
 }
 
+// Database timestamps are stored without an offset. Attach the PHP/MySQL
+// server timezone before sending them to JavaScript so browser comparisons
+// use an unambiguous instant while display formatting remains local.
+function normalized_timestamp($value)
+{
+    $date = DateTime::createFromFormat('Y-m-d H:i:s', (string) $value);
+    return $date ? $date->format(DateTime::ATOM) : $value;
+}
+
 $records = [];
 $weatherCount = 0;
 $trafficCount = 0;
@@ -74,6 +83,7 @@ if (!$result) {
 }
 
 while ($row = mysqli_fetch_assoc($result)) {
+    $timestamp = normalized_timestamp($row['recorded_at']);
     $records[] = [
         'source'     => 'weather',
         'event_type' => 'weather',
@@ -83,11 +93,11 @@ while ($row = mysqli_fetch_assoc($result)) {
         'value'      => (float) $row['temperature'],
         'rainfall'   => (float) $row['rainfall'],
         'severity'   => normalize_severity($row['severity']),
-        'timestamp'  => $row['recorded_at'],
+        'timestamp'  => $timestamp,
     ];
     $weatherCount++;
-    if ($latestTimestamp === null || $row['recorded_at'] > $latestTimestamp) {
-        $latestTimestamp = $row['recorded_at'];
+    if ($latestTimestamp === null || strtotime($timestamp) > strtotime($latestTimestamp)) {
+        $latestTimestamp = $timestamp;
     }
 }
 
@@ -105,6 +115,7 @@ if (!$result) {
 }
 
 while ($row = mysqli_fetch_assoc($result)) {
+    $timestamp = normalized_timestamp($row['recorded_at']);
     $records[] = [
         'source'     => 'traffic',
         'event_type' => 'traffic',
@@ -113,11 +124,11 @@ while ($row = mysqli_fetch_assoc($result)) {
         'longitude'  => (float) $row['longitude'],
         'value'      => (int) $row['delay_minutes'],
         'severity'   => normalize_severity($row['severity']),
-        'timestamp'  => $row['recorded_at'],
+        'timestamp'  => $timestamp,
     ];
     $trafficCount++;
-    if ($latestTimestamp === null || $row['recorded_at'] > $latestTimestamp) {
-        $latestTimestamp = $row['recorded_at'];
+    if ($latestTimestamp === null || strtotime($timestamp) > strtotime($latestTimestamp)) {
+        $latestTimestamp = $timestamp;
     }
 }
 
@@ -135,6 +146,7 @@ if (!$result) {
 }
 
 while ($row = mysqli_fetch_assoc($result)) {
+    $timestamp = normalized_timestamp($row['recorded_at']);
     $records[] = [
         'source'     => 'incident',
         'event_type' => 'incident',
@@ -143,11 +155,11 @@ while ($row = mysqli_fetch_assoc($result)) {
         'longitude'  => (float) $row['longitude'],
         'value'      => $row['incident_type'],
         'severity'   => normalize_severity($row['severity']),
-        'timestamp'  => $row['recorded_at'],
+        'timestamp'  => $timestamp,
     ];
     $incidentCount++;
-    if ($latestTimestamp === null || $row['recorded_at'] > $latestTimestamp) {
-        $latestTimestamp = $row['recorded_at'];
+    if ($latestTimestamp === null || strtotime($timestamp) > strtotime($latestTimestamp)) {
+        $latestTimestamp = $timestamp;
     }
 }
 
@@ -165,6 +177,7 @@ if (!$result) {
 }
 
 while ($row = mysqli_fetch_assoc($result)) {
+    $timestamp = normalized_timestamp($row['recorded_at']);
     $records[] = [
         'source'     => 'air_quality',
         'event_type' => 'air_quality',
@@ -173,11 +186,11 @@ while ($row = mysqli_fetch_assoc($result)) {
         'longitude'  => (float) $row['longitude'],
         'value'      => (float) $row['pm25'],
         'severity'   => normalize_severity($row['severity']),
-        'timestamp'  => $row['recorded_at'],
+        'timestamp'  => $timestamp,
     ];
     $airQualityCount++;
-    if ($latestTimestamp === null || $row['recorded_at'] > $latestTimestamp) {
-        $latestTimestamp = $row['recorded_at'];
+    if ($latestTimestamp === null || strtotime($timestamp) > strtotime($latestTimestamp)) {
+        $latestTimestamp = $timestamp;
     }
 }
 

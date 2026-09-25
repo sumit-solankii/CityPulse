@@ -29,5 +29,6 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 // Send the data as JSON.
+header('X-CityPulse-Fetched-At: ' . gmdate('c'));
 header('Content-Type: application/json');
 echo json_encode($incidents, JSON_PRETTY_PRINT);
