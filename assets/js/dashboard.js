@@ -29,7 +29,7 @@
     var TREND_HOURS = 8;
     var timelineHours = 6;
     var civicTrendHours = 6;
-    var NEARBY_RADIUS_KM = 10;
+    var NEARBY_RADIUS_KM = 25;
     var LOCATION_REFRESH_THRESHOLD_KM = 0.5;
 
     // Leaflet map (Step 8): the browser location is the live center.
@@ -1011,6 +1011,15 @@
         var aq = activeView().airQuality;
         var badgeEl = el("air-quality-badge");
 
+        if (aq && aq.no_data) {
+            badgeEl.innerHTML = "";
+            badgeEl.appendChild(badge("NO DATA", "st-normal"));
+            setText("air-quality-value", "No nearby AQI station");
+            setText("air-quality-desc", aq.message || "No nearby AQI station found.");
+            setText("air-quality-updated", "--");
+            return;
+        }
+
         if (!aq || !aq.success || !aq.measurements) {
             badgeEl.innerHTML = "";
             badgeEl.appendChild(badge("Unavailable", "st-unavailable"));
@@ -1556,6 +1565,13 @@
         if (!payload) {
             return { status: "OFFLINE", message: "Data source status temporarily unavailable.", latest: null };
         }
+        if (kind === "air_quality" && payload.success === false && payload.no_data) {
+            return {
+                status: "NO DATA",
+                message: payload.message || "No nearby AQI station found.",
+                latest: payload.__fetched_at || null
+            };
+        }
         if (payload.error || (kind === "air_quality" && payload.success === false)) {
             return {
                 status: "OFFLINE",
@@ -1609,7 +1625,7 @@
         }
 
         return {
-            status: "HEALTHY",
+            status: Array.isArray(payload) && payload.length === 0 ? "NO DATA" : "HEALTHY",
             message: Array.isArray(payload) && payload.length === 0 ? "No new records." : "Updated recently.",
             latest: latest
         };
@@ -1630,9 +1646,10 @@
 
         sources.forEach(function (source) {
             var info = sourceStatus(source.payload, source.kind, source.maxAge);
+            var statusClass = info.status.toLowerCase().replace(/\s+/g, "-");
 
             var item = document.createElement("div");
-            item.className = "source-item source-" + info.status.toLowerCase();
+            item.className = "source-item source-" + statusClass;
 
             var name = document.createElement("div");
             name.className = "source-name";
@@ -1643,7 +1660,7 @@
             provider.textContent = source.provider;
 
             var status = document.createElement("div");
-            status.className = "source-status st-" + info.status.toLowerCase();
+            status.className = "source-status st-" + statusClass;
             status.textContent = info.status;
 
             var note = document.createElement("div");
@@ -2081,7 +2098,8 @@
             ];
             feeds.forEach(function (feed, index) {
                 var result = results[index];
-                if (result.status === "fulfilled" && !(result.value && result.value.success === false && state[feed[0]])) {
+                var successfulNoData = result.value && result.value.success === false && result.value.no_data;
+                if (result.status === "fulfilled" && (successfulNoData || !(result.value && result.value.success === false))) {
                     state[feed[0]] = result.value;
                     state.fetchErrors[feed[1]] = null;
                 } else {
@@ -2092,6 +2110,24 @@
                         state[feed[0]] = result.value;
                     }
                 }
+            });
+
+            function recordDiagnostics(payload) {
+                var records = Array.isArray(payload) ? payload : [];
+                var valid = records.filter(function (record) {
+                    var lat = Number(record && record.latitude);
+                    var lng = Number(record && record.longitude);
+                    return isFinite(lat) && isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+                }).length;
+                return { total: records.length, validCoordinates: valid };
+            }
+            console.info("[CityPulse data]", {
+                userLocation: state.currentLocation ? [state.currentLocation.latitude, state.currentLocation.longitude] : null,
+                weatherResponse: state.weather,
+                openAQResponse: state.airQuality,
+                trafficRecords: recordDiagnostics(state.traffic),
+                incidentRecords: recordDiagnostics(state.incidents),
+                radiusKm: NEARBY_RADIUS_KM
             });
 
             renderAll();

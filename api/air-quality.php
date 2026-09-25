@@ -221,9 +221,10 @@ function air_quality_severity($measurements)
  * object explains the failed request. Neither ever contains the API
  * key, so the JSON is safe to view in the browser.
  */
-function air_quality_fail($message = 'Air quality data temporarily unavailable.', $debug = null)
+function air_quality_fail($message = 'Air quality data temporarily unavailable.', $debug = null, $noData = false)
 {
     http_response_code(200); // graceful: the dashboard can still render
+    header('X-CityPulse-Fetched-At: ' . gmdate('c'));
     header('Content-Type: application/json');
 
     $payload = [
@@ -231,6 +232,8 @@ function air_quality_fail($message = 'Air quality data temporarily unavailable.'
         'source'  => 'OpenAQ',
         'message' => $message,
     ];
+
+    if ($noData) $payload['no_data'] = true;
 
     if (is_array($debug)) {
         $payload['debug'] = $debug;
@@ -382,7 +385,8 @@ if ($locations === null || count($locations) === 0) {
     error_log('CityPulse air-quality: no monitoring stations found near the browser location.');
     air_quality_fail(
         'No nearby AQI station found.',
-        air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body'])
+        air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body']),
+        true
     );
 }
 
@@ -408,7 +412,8 @@ if ($nearest === null) {
     error_log('CityPulse air-quality: stations found, but none with usable coordinates.');
     air_quality_fail(
         'No nearby AQI station with usable coordinates found.',
-        air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body'])
+        air_quality_debug($locationsUrl, $locationsCall['status'], $locationsCall['curl_error'], $locationsCall['body']),
+        true
     );
 }
 

@@ -221,8 +221,8 @@
                 <label class="map-radius-control" for="map-radius">Nearby radius
                     <select id="map-radius">
                         <option value="5">5 km</option>
-                        <option value="10" selected>10 km</option>
-                        <option value="25">25 km</option>
+                        <option value="10">10 km</option>
+                        <option value="25" selected>25 km</option>
                     </select>
                 </label>
                 <span id="map-location-status" class="map-location-status" role="status" aria-live="polite"></span>

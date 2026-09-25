@@ -6,7 +6,7 @@
  * They are never stored by this helper.
  */
 
-define('CITYPULSE_DEFAULT_RADIUS_KM', 10.0);
+define('CITYPULSE_DEFAULT_RADIUS_KM', 25.0);
 
 function citypulse_request_location($required = true)
 {

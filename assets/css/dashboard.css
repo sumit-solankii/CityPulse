@@ -575,7 +575,7 @@ body.dashboard-page {
 .st-normal      { background: #1e293b; color: #94a3b8; border-color: #334155; }
 .st-moderate    { background: rgba(250, 204, 21, 0.14); color: var(--yellow); border-color: rgba(250, 204, 21, 0.5); }
 .st-high        { background: rgba(248, 113, 113, 0.14); color: var(--red); border-color: rgba(248, 113, 113, 0.5); }
-.st-healthy, .st-online { background: rgba(74, 222, 128, 0.12); color: var(--green); border-color: rgba(74, 222, 128, 0.45); }
+.st-healthy, .st-online, .st-no-data { background: rgba(74, 222, 128, 0.12); color: var(--green); border-color: rgba(74, 222, 128, 0.45); }
 .st-degraded    { background: rgba(251, 146, 60, 0.14); color: var(--orange); border-color: rgba(251, 146, 60, 0.5); }
 .st-offline     { background: rgba(248, 113, 113, 0.14); color: var(--red); border-color: rgba(248, 113, 113, 0.5); }
 .st-unavailable { background: rgba(148, 163, 184, 0.12); color: var(--muted); border-color: var(--border); }
@@ -886,7 +886,7 @@ body.dashboard-page {
     font-size: 0.72rem;
 }
 
-.source-healthy, .source-online { border-color: rgba(74, 222, 128, 0.28); }
+.source-healthy, .source-online, .source-no-data { border-color: rgba(74, 222, 128, 0.28); }
 .source-degraded { border-color: rgba(251, 146, 60, 0.35); }
 .source-offline { border-color: rgba(248, 113, 113, 0.35); }
 .source-demo { border-color: rgba(250, 204, 21, 0.35); }

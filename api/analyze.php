@@ -102,6 +102,7 @@ $records = $normalized['data'];
 $weatherByLocation   = []; // location => ['severity' => ..., 'timestamp' => ...]
 $trafficByLocation   = []; // location => ['delay' => ..., 'timestamp' => ...]
 $incidentsByLocation = []; // location => ['count' => ..., 'timestamp' => ...]
+$airQualityByLocation = []; // location => ['severity' => ..., 'timestamp' => ...]
 
 $incidentCutoff = date('Y-m-d H:i:s', time() - INCIDENT_RECENT_WINDOW_HOURS * 3600);
 
@@ -127,6 +128,10 @@ foreach ($records as $record) {
             if ($incidentsByLocation[$loc]['timestamp'] === null || $ts > $incidentsByLocation[$loc]['timestamp']) {
                 $incidentsByLocation[$loc]['timestamp'] = $ts;
             }
+        }
+    } elseif ($record['source'] === 'air_quality') {
+        if (!isset($airQualityByLocation[$loc]) || $ts > $airQualityByLocation[$loc]['timestamp']) {
+            $airQualityByLocation[$loc] = ['severity' => $record['severity'], 'timestamp' => $ts];
         }
     }
 }
@@ -171,6 +176,17 @@ foreach ($weatherByLocation as $loc => $w) {
     }
 }
 
+foreach ($airQualityByLocation as $loc => $aq) {
+    if ($aq['severity'] !== 'NORMAL') {
+        $anomalies[] = [
+            'type'     => 'air_quality',
+            'location' => $loc,
+            'severity' => $aq['severity'],
+            'reason'   => "Current air quality severity in {$loc} is {$aq['severity']}.",
+        ];
+    }
+}
+
 // ------------------------------------------------------------
 // 4) Possible correlations (same area + ~15 minute window).
 //    These are coincidence checks ONLY - never causation.
@@ -180,7 +196,8 @@ $correlations = [];
 $locations = array_values(array_unique(array_merge(
     array_keys($weatherByLocation),
     array_keys($trafficByLocation),
-    array_keys($incidentsByLocation)
+    array_keys($incidentsByLocation),
+    array_keys($airQualityByLocation)
 )));
 
 foreach ($locations as $loc) {
